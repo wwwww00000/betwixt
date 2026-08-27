@@ -1,0 +1,93 @@
+*betwixt.txt*  Local-first plain-text code-review sidecars
+
+===============================================================================
+CONTENTS                                                        *betwixt-contents*
+
+1. Introduction ............................................... |betwixt|
+2. Setup ................................................. |betwixt-setup|
+3. Commands ............................................ |betwixt-commands|
+4. Sidecars ............................................ |betwixt-sidecars|
+
+===============================================================================
+INTRODUCTION                                                          *betwixt*
+
+Betwixt projects review comments from a repository-co-located plain-text
+sidecar into a normal source buffer. Comments begin as virtual highlighted
+lines and can be materialized as real source-language comment lines for direct
+editing. |:write| separates source and review lines and writes each backing
+file.
+
+===============================================================================
+SETUP                                                          *betwixt-setup*
+
+>lua
+    require("betwixt").setup({
+      author = "reviewer",
+      mappings = {
+        comment = "<leader>rc",
+        edit = "<leader>re",
+      },
+    })
+<
+
+`author` is used for newly created comments. It falls back to
+`g:betwixt_author`, then `human`.
+
+`mappings.comment` creates a comment on the current line in Normal mode or the
+selected lines in Visual mode. `mappings.edit` toggles virtual and materialized
+display. Set either value to `false` to disable that mapping.
+
+===============================================================================
+COMMANDS                                                    *betwixt-commands*
+
+                                                   *:BetwixtAttach*
+:BetwixtAttach[!] {sidecar}
+        Attach {sidecar} to the current normal source buffer. Comments are
+        placed after their resolved ranges by default; [!] places them before.
+
+                                                     *:BetwixtOpen*
+:BetwixtOpen[!] {sidecar}
+        Open the older all-in-one editable projection. [!] places comments
+        before their ranges.
+
+The following commands are local to an attached source buffer:
+
+                                                  *:BetwixtComment*
+:[range]BetwixtComment [type]
+        Create an open comment on [range]. Without an explicit range, target
+        the cursor line. [type] defaults to `comment`. The new body is
+        materialized for immediate editing.
+
+                                                     *:BetwixtEdit*
+:BetwixtEdit
+        Materialize review sections as syntactic comment lines.
+
+                                                   *:BetwixtToggle*
+:BetwixtToggle
+        Toggle virtual and materialized display.
+
+                                                  *:BetwixtVirtual*
+:BetwixtVirtual[!]
+        Return to virtual display. Refuse unsaved materialized edits unless
+        [!] is supplied; [!] discards them.
+
+                                                  *:BetwixtRefresh*
+:BetwixtRefresh
+        Reload the sidecar and rerender its virtual comments.
+
+                                                   *:BetwixtDetach*
+:BetwixtDetach
+        Remove the projection and buffer-local commands and mappings.
+
+===============================================================================
+SIDECARS                                                    *betwixt-sidecars*
+
+The current sidecar contains one `file:` field and one or more `## Comment`
+sections. Each comment records `range`, `author`, `status`, `type`, an exact
+indented `anchor`, and a verbatim `body`.
+
+Betwixt reports a unique relocated anchor as moved. Missing and repeated
+anchors are displayed as stale and ambiguous. It does not automatically
+rewrite stored ranges or anchors.
+
+vim:tw=78:ts=8:noet:ft=help:norl:
