@@ -46,6 +46,21 @@ limitations.
 - automatic anchor migration;
 - permanent per-file, per-review, or repository-wide storage organization.
 
+## Potential Anchoring Experiment
+
+[`doubt.nvim`](https://github.com/makefinks/doubt.nvim) is relevant prior art
+for relocating comments after edits. It supplements the selected source text
+with short before-and-after context, prefers one unique contextual or exact
+match, and treats missing or ambiguous matches as stale.
+
+A possible Betwixt experiment is to add similarly readable surrounding context
+to the sidecar and use it only to disambiguate moved exact anchors. The original
+range and anchor would remain durable, while the projection reports the resolved
+range. Automatically rewriting stored anchors, continuously reclassifying every
+edit, and adopting Doubt's broader session model remain out of scope unless use
+of the simpler approach provides evidence for them. This is a candidate future
+experiment, not committed current work.
+
 ## Open Questions
 
 - How should the first sidecar be created and discovered without prematurely
