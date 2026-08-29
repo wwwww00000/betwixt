@@ -22,7 +22,8 @@ synthetic fixtures. The current end-to-end path can:
    `:BetwixtComment`;
 7. run materialized source writes through Neovim's native write hooks while
    keeping review lines out of the source file;
-8. report exact anchors as current, moved, stale, or ambiguous; and
+8. report context-assisted exact anchors as current, moved, stale, or
+   ambiguous; and
 9. preserve side-by-side alignment in the tested CodeDiff case while remaining
    editable in CodeDiff and Diffview working-file panes.
 
@@ -50,27 +51,33 @@ limitations.
 - automatic anchor migration;
 - permanent per-file, per-review, or repository-wide storage organization.
 
-## Potential Anchoring Experiment
+## Current Anchoring Experiment
 
 [`doubt.nvim`](https://github.com/makefinks/doubt.nvim) is relevant prior art
 for relocating comments after edits. It supplements the selected source text
 with short before-and-after context, prefers one unique contextual or exact
 match, and treats missing or ambiguous matches as stale.
 
-A possible Betwixt experiment is to add similarly readable surrounding context
-to the sidecar and use it only to disambiguate moved exact anchors. The original
-range and anchor would remain durable, while the projection reports the resolved
-range. Automatically rewriting stored anchors, continuously reclassifying every
-edit, and adopting Doubt's broader session model remain out of scope unless use
-of the simpler approach provides evidence for them. This is a candidate future
-experiment, not committed current work.
+Betwixt now records one readable source line before and after new anchors and
+uses that context only to disambiguate exact matches. The original range,
+anchor, and context remain durable while the projection reports the resolved
+range. Older exact-only sidecars remain valid.
+
+The current tests cover insertions and deletions above a target, reordered
+functions with identical target text, changed surrounding context around a
+unique target, duplicated target-plus-context blocks, and edited or deleted
+target text. Exact target text survives ordinary movement and reorder; changing
+or deleting the selected text deliberately yields a stale anchor. Automatically
+rewriting stored anchors, continuously reclassifying every edit, fuzzy matching
+edited targets, and adopting Doubt's broader session model remain out of scope
+until use of this smaller approach provides evidence for them.
 
 ## Open Questions
 
 - Does the adjacent `<source-file>.betwixt.md` default remain usable in real
   reviews without prematurely settling repository-wide organization?
-- Is the current exact excerpt anchor adequate in real reviews where the
-  targeted lines themselves change?
+- Should a later bounded experiment help recover anchors when the targeted
+  lines themselves change, or is an explicit stale state safer?
 - Do `status` and `type` earn their place through actual review use?
 - Is after-range display still the right default outside the synthetic cases?
 - Is temporary diff rematching during materialized editing acceptable in

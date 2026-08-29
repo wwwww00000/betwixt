@@ -94,8 +94,10 @@ assert(vim.deep_equal(vim.fn.readfile(source_path), source), "writing a range co
 local written = sidecar_text()
 assert(written:find("range: 1%-2\nauthor: reviewer\nstatus: open\ntype: risk"), "edited header metadata should persist")
 assert(
-  written:find("anchor:\n    local function total%(value%)\n      local subtotal = value\nbody:"),
-  "the selected source lines should become the exact anchor"
+  written:find(
+    "anchor:\n    local function total%(value%)\n      local subtotal = value\ncontext%-before:\ncontext%-after:\n      return subtotal\nbody:"
+  ),
+  "the selected source lines and their adjacent context should become the anchor"
 )
 assert(written:find("This covers the selected range%.", 1, false), "the range comment body should persist")
 betwixt.virtualize(source_buffer, false)
@@ -119,8 +121,10 @@ assert(
   "current-line defaults should persist"
 )
 assert(
-  written:find("anchor:\n    end %-%- retained source edit\nbody:\nThis was noted at the cursor%."),
-  "the current edited line should become the anchor"
+  written:find(
+    "anchor:\n    end %-%- retained source edit\ncontext%-before:\n      return subtotal\ncontext%-after:\nbody:\nThis was noted at the cursor%."
+  ),
+  "the current edited line and its file-boundary context should become the anchor"
 )
 betwixt.virtualize(source_buffer, false)
 

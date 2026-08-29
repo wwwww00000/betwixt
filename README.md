@@ -60,13 +60,25 @@ type: question
 anchor:
       local subtotal = value
       return subtotal
+context-before:
+    local function total(value)
+context-after:
+    end
 body:
 Could this be clearer?
 ```
 
-The exact source excerpt is the current experimental anchor. A uniquely moved
-excerpt is displayed as moved; missing or repeated excerpts are displayed as
-stale or ambiguous. Betwixt does not rewrite stored ranges automatically.
+`anchor` is the exact selected source excerpt. New comments also retain one
+immediately adjacent line in each context block; an empty block records that
+the range touched that file boundary. The context is only a tie-breaker between
+repeated exact excerpts. If the context changes but the anchor remains unique,
+the anchor still resolves.
+
+A uniquely relocated excerpt is displayed as moved. If the selected text is
+edited or deleted, it is displayed as stale. Repeated excerpts remain
+ambiguous unless exactly one has the recorded context. Older exact-only
+sidecars remain valid, and Betwixt does not rewrite stored ranges, anchors, or
+context automatically.
 
 ## Workflow
 
@@ -117,7 +129,8 @@ Run `:help betwixt` for the command reference.
 This is an early plugin slice, tested with Neovim 0.12. The retained fixtures
 cover lazy first-comment creation, native write hooks and failure recovery, Lua,
 JavaScript, and Python comment syntax, ordinary attachment, simultaneous source
-and sidecar writes, CodeDiff alignment, and Diffview editing.
+and sidecar writes, context-assisted anchoring under common source edits,
+CodeDiff alignment, and Diffview editing.
 
 Multi-file artifact organization, automatic anchor migration, threads,
 replies, and hosted collaboration remain deliberately outside the current

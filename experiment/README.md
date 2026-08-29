@@ -151,6 +151,10 @@ boundary with:
 
 The bang selects placement before the range. To exercise the anchor, insert
 source lines above a target directly in the projected buffer, use `:write`, and
-then run `:BetwixtReload` to refresh the anchor display. Betwixt reports a
-unique relocated excerpt as `moved`; missing or repeated excerpts become
-`stale` or `ambiguous`. Reloading never rewrites the stored range.
+then run `:BetwixtReload` to refresh the anchor display. The retained fixture
+is also an exact-only compatibility case. Newly created comments add one
+readable line of context on each side to disambiguate repeated exact excerpts.
+Betwixt reports a unique relocated excerpt as `moved`; edited or deleted
+targets become `stale`, and repeated targets without one contextual match
+become `ambiguous`. Reloading never rewrites the stored range, anchor, or
+context.

@@ -59,6 +59,12 @@ assert(vim.deep_equal(vim.fn.readfile(source_path), source), "lazy sidecar creat
 local written = sidecar_text()
 assert(written:find("file: sample%.py") ~= nil, "the default sidecar should target its adjacent source")
 assert(written:find("range: 2%-3") ~= nil, "the first selected range should persist")
+assert(
+  written:find(
+    "anchor:\n        subtotal = value\n        return subtotal\ncontext%-before:\n    def total%(value%):\ncontext%-after:\nbody:"
+  ) ~= nil,
+  "a first comment should retain adjacent context and the end-of-file boundary"
+)
 assert(written:find("Check the total calculation%.") ~= nil, "the first comment body should persist")
 
 betwixt.virtualize(source_buffer, false)

@@ -92,7 +92,13 @@ local function parse_sidecar(lines, path)
         review.file = file
       end
     elseif mode == "anchor" then
-      if line == "body:" then
+      if line == "context-before:" then
+        comment.context_before = {}
+        mode = "context_before"
+      elseif line == "context-after:" then
+        comment.context_after = {}
+        mode = "context_after"
+      elseif line == "body:" then
         comment.saw_body = true
         mode = "body"
       else
@@ -101,6 +107,31 @@ local function parse_sidecar(lines, path)
           fail("anchor line %d must be indented by four spaces in %s", line_number, path)
         end
         table.insert(comment.anchor, anchor_line)
+      end
+    elseif mode == "context_before" then
+      if line == "context-after:" then
+        comment.context_after = {}
+        mode = "context_after"
+      elseif line == "body:" then
+        comment.saw_body = true
+        mode = "body"
+      else
+        local context_line = line:match("^    (.*)$")
+        if context_line == nil then
+          fail("context-before line %d must be indented by four spaces in %s", line_number, path)
+        end
+        table.insert(comment.context_before, context_line)
+      end
+    elseif mode == "context_after" then
+      if line == "body:" then
+        comment.saw_body = true
+        mode = "body"
+      else
+        local context_line = line:match("^    (.*)$")
+        if context_line == nil then
+          fail("context-after line %d must be indented by four spaces in %s", line_number, path)
+        end
+        table.insert(comment.context_after, context_line)
       end
     elseif mode == "body" then
       table.insert(comment.body, line)
@@ -156,6 +187,18 @@ local function serialize_sidecar(review)
     for _, anchor_line in ipairs(comment.anchor) do
       table.insert(lines, "    " .. anchor_line)
     end
+    if comment.context_before ~= nil then
+      table.insert(lines, "context-before:")
+      for _, context_line in ipairs(comment.context_before) do
+        table.insert(lines, "    " .. context_line)
+      end
+    end
+    if comment.context_after ~= nil then
+      table.insert(lines, "context-after:")
+      for _, context_line in ipairs(comment.context_after) do
+        table.insert(lines, "    " .. context_line)
+      end
+    end
     table.insert(lines, "body:")
     vim.list_extend(lines, comment.body)
     table.insert(lines, "")
@@ -176,23 +219,60 @@ local function slice_matches(source, first, anchor)
   return true
 end
 
+local function context_matches(source, first, comment)
+  if comment.context_before ~= nil then
+    if #comment.context_before == 0 then
+      if first ~= 1 then
+        return false
+      end
+    elseif not slice_matches(source, first - #comment.context_before, comment.context_before) then
+      return false
+    end
+  end
+
+  if comment.context_after ~= nil then
+    local last = first + #comment.anchor - 1
+    if #comment.context_after == 0 then
+      if last ~= #source then
+        return false
+      end
+    elseif not slice_matches(source, last + 1, comment.context_after) then
+      return false
+    end
+  end
+
+  return true
+end
+
 local function resolve_anchor(source, comment)
-  if slice_matches(source, comment.first, comment.anchor) then
+  local has_context = comment.context_before ~= nil or comment.context_after ~= nil
+  if not has_context and slice_matches(source, comment.first, comment.anchor) then
     return { first = comment.first, last = comment.last, state = "current" }
   end
 
   local matches = {}
+  local contextual_matches = {}
   for first = 1, #source - #comment.anchor + 1 do
     if slice_matches(source, first, comment.anchor) then
       table.insert(matches, first)
+      if has_context and context_matches(source, first, comment) then
+        table.insert(contextual_matches, first)
+      end
     end
   end
 
-  if #matches == 1 then
+  local resolved_first
+  if #contextual_matches == 1 then
+    resolved_first = contextual_matches[1]
+  elseif #matches == 1 then
+    resolved_first = matches[1]
+  end
+
+  if resolved_first then
     return {
-      first = matches[1],
-      last = matches[1] + #comment.anchor - 1,
-      state = "moved",
+      first = resolved_first,
+      last = resolved_first + #comment.anchor - 1,
+      state = resolved_first == comment.first and "current" or "moved",
     }
   end
 
@@ -1140,6 +1220,8 @@ function M.comment(source_buffer, first, last, comment_type)
     anchor = vim.list_slice(source, first, last),
     author = author,
     body = {},
+    context_after = last < #source and { source[last + 1] } or {},
+    context_before = first > 1 and { source[first - 1] } or {},
     first = first,
     last = last,
     status = "open",

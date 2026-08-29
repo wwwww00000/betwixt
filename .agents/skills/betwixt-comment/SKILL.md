@@ -24,6 +24,10 @@ preserving a strict comment-versus-change boundary.
   frontend needs one display boundary.
 - Preserve enough visible source context to make the target understandable
   under the repository's current experimental convention.
+- Under Betwixt's context-assisted convention, copy the exact selected lines
+  into `anchor`, the immediately preceding line into `context-before`, and the
+  immediately following line into `context-after`. Leave a context block empty
+  when the range touches that file boundary.
 - Record authorship, status, and note type as visible text, followed by the
   comment body in the user's wording or a faithful concise review statement.
 - Add a new comment only. Do not invent a thread, reply relationship, or hidden
