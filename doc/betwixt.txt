@@ -15,7 +15,8 @@ Betwixt projects review comments from a repository-co-located plain-text
 sidecar into a normal source buffer. Comments begin as virtual highlighted
 lines and can be materialized as real source-language comment lines for direct
 editing. |:write| separates source and review lines and writes each backing
-file.
+file. The source is passed through Neovim's native write path without the
+review lines, so normal write hooks continue to see ordinary source text.
 
 ===============================================================================
 SETUP                                                          *betwixt-setup*
@@ -34,8 +35,9 @@ SETUP                                                          *betwixt-setup*
 `g:betwixt_author`, then `human`.
 
 `mappings.comment` creates a comment on the current line in Normal mode or the
-selected lines in Visual mode. `mappings.edit` toggles virtual and materialized
-display. Set either value to `false` to disable that mapping.
+selected lines in Visual mode after a sidecar is attached. `mappings.edit`
+toggles virtual and materialized display. Set either value to `false` to
+disable that mapping. Use |:BetwixtComment| to start the first review.
 
 ===============================================================================
 COMMANDS                                                    *betwixt-commands*
@@ -50,13 +52,16 @@ COMMANDS                                                    *betwixt-commands*
         Open the older all-in-one editable projection. [!] places comments
         before their ranges.
 
-The following commands are local to an attached source buffer:
-
                                                   *:BetwixtComment*
 :[range]BetwixtComment [type]
         Create an open comment on [range]. Without an explicit range, target
-        the cursor line. [type] defaults to `comment`. The new body is
-        materialized for immediate editing.
+        the cursor line. [type] defaults to `comment`. If no sidecar is
+        attached to a saved normal file, lazily create an in-memory review for
+        `<source-file>.betwixt.md`; the file appears on the first |:write|.
+        An existing default sidecar is discovered and attached. The new body
+        is materialized for immediate editing.
+
+The following commands are local to an attached source buffer:
 
                                                      *:BetwixtEdit*
 :BetwixtEdit
@@ -85,6 +90,9 @@ SIDECARS                                                    *betwixt-sidecars*
 The current sidecar contains one `file:` field and one or more `## Comment`
 sections. Each comment records `range`, `author`, `status`, `type`, an exact
 indented `anchor`, and a verbatim `body`.
+
+The default first-comment flow places the sidecar beside its source as
+`<source-file>.betwixt.md`. Explicitly attached sidecars may use another name.
 
 Betwixt reports a unique relocated anchor as moved. Missing and repeated
 anchors are displayed as stale and ambiguous. It does not automatically

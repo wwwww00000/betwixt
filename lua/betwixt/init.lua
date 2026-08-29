@@ -27,6 +27,10 @@ local function read_lines(path)
   return lines
 end
 
+local function path_exists(path)
+  return vim.uv.fs_stat(path) ~= nil
+end
+
 local function absolute(path)
   return vim.fs.normalize(vim.fn.fnamemodify(path, ":p"))
 end
@@ -516,7 +520,23 @@ local function decode_comment_line(leader, line)
   return line:sub(#prefix + 1)
 end
 
-local function render_interleaved(attachment, source)
+local function mark_interleaved_blocks(attachment, blocks)
+  local buffer = attachment.source_buffer
+  vim.api.nvim_buf_clear_namespace(buffer, interleaved_namespace, 0, -1)
+  for _, block in ipairs(blocks) do
+    block.mark = vim.api.nvim_buf_set_extmark(buffer, interleaved_namespace, block.start_row, 0, {
+      end_row = block.end_row,
+      end_col = 0,
+      end_right_gravity = true,
+      hl_eol = true,
+      hl_group = "BetwixtComment",
+      priority = 200,
+      right_gravity = false,
+    })
+  end
+end
+
+local function render_interleaved(attachment, source, preserve_undo)
   local buffer = attachment.source_buffer
   local state = attachment.interleaved
   local display_review = vim.deepcopy(attachment.review)
@@ -536,20 +556,15 @@ local function render_interleaved(attachment, source)
   end
 
   clear_codediff_spacers(attachment, true)
-  replace_buffer_lines(buffer, lines)
-  vim.api.nvim_buf_clear_namespace(buffer, virtual_namespace, 0, -1)
-  vim.api.nvim_buf_clear_namespace(buffer, interleaved_namespace, 0, -1)
-  for _, block in ipairs(blocks) do
-    block.mark = vim.api.nvim_buf_set_extmark(buffer, interleaved_namespace, block.start_row, 0, {
-      end_row = block.end_row,
-      end_col = 0,
-      end_right_gravity = true,
-      hl_eol = true,
-      hl_group = "BetwixtComment",
-      priority = 200,
-      right_gravity = false,
-    })
+  if not vim.deep_equal(source_buffer_lines(buffer), lines) then
+    if preserve_undo then
+      vim.api.nvim_buf_set_lines(buffer, 0, -1, false, lines)
+    else
+      replace_buffer_lines(buffer, lines)
+    end
   end
+  vim.api.nvim_buf_clear_namespace(buffer, virtual_namespace, 0, -1)
+  mark_interleaved_blocks(attachment, blocks)
   state.blocks = blocks
   vim.bo[buffer].modified = false
 end
@@ -620,7 +635,32 @@ local function collect_interleaved(attachment)
   return source, review
 end
 
-local function write_interleaved(attachment)
+local install_interleaved_write
+
+local function sidecar_is_unchanged(attachment)
+  if attachment.sidecar_lines == nil then
+    if path_exists(attachment.sidecar_path) then
+      fail("sidecar was created externally; leave with :BetwixtVirtual! and attach it explicitly")
+    end
+    return
+  end
+  if not vim.deep_equal(read_lines(attachment.sidecar_path), attachment.sidecar_lines) then
+    fail("sidecar changed on disk; leave with :BetwixtVirtual! and use :BetwixtRefresh")
+  end
+end
+
+local function restore_undo_sequence(buffer, sequence, original_lines)
+  local ok = pcall(vim.api.nvim_buf_call, buffer, function()
+    if vim.fn.undotree().seq_cur ~= sequence then
+      vim.cmd("silent undo! " .. sequence)
+    end
+  end)
+  if not ok or not vim.deep_equal(source_buffer_lines(buffer), original_lines) then
+    vim.api.nvim_buf_set_lines(buffer, 0, -1, false, original_lines)
+  end
+end
+
+local function write_interleaved(attachment, event)
   local buffer = attachment.source_buffer
   local state = attachment.interleaved
   if not state then
@@ -631,42 +671,73 @@ local function write_interleaved(attachment)
   if not vim.deep_equal(read_lines(attachment.source_path), state.source_lines) then
     fail("source changed on disk; leave with :BetwixtVirtual! to discard the interleaved edit")
   end
-  if not vim.deep_equal(read_lines(attachment.sidecar_path), attachment.sidecar_lines) then
-    fail("sidecar changed on disk; leave with :BetwixtVirtual! and use :BetwixtRefresh")
+  sidecar_is_unchanged(attachment)
+  if event and event.file ~= "" and absolute(event.file) ~= attachment.source_path then
+    fail("interleaved editing only supports writing the attached source path")
   end
 
   local sidecar_lines = serialize_sidecar(review)
-  local source_changed = not vim.deep_equal(source, state.source_lines)
   local sidecar_changed = not vim.deep_equal(sidecar_lines, attachment.sidecar_lines)
-  local written = {}
 
-  if source_changed then
-    if vim.fn.writefile(source, attachment.source_path) ~= 0 then
-      fail("could not write %s", attachment.source_path)
-    end
-    table.insert(written, attachment.source_path)
+  local original_lines = source_buffer_lines(buffer)
+  local original_modified = vim.bo[buffer].modified
+  local undo_sequence = vim.api.nvim_buf_call(buffer, function()
+    return vim.fn.undotree().seq_cur
+  end)
+  local force = vim.v.cmdbang == 1
+
+  if state.write_autocmd then
+    pcall(vim.api.nvim_del_autocmd, state.write_autocmd)
+    state.write_autocmd = nil
+  end
+  state.native_write = true
+  vim.api.nvim_buf_clear_namespace(buffer, interleaved_namespace, 0, -1)
+  vim.api.nvim_buf_set_lines(buffer, 0, -1, false, source)
+
+  local native_ok, native_error = pcall(vim.api.nvim_buf_call, buffer, function()
+    vim.cmd(force and "write!" or "write")
+  end)
+  local written_source = source_buffer_lines(buffer)
+  restore_undo_sequence(buffer, undo_sequence, original_lines)
+  state.native_write = nil
+  install_interleaved_write(attachment)
+
+  if not native_ok then
+    mark_interleaved_blocks(attachment, state.blocks)
+    vim.bo[buffer].modified = original_modified
+    error(native_error, 0)
   end
 
-  if sidecar_changed then
-    if vim.fn.writefile(sidecar_lines, attachment.sidecar_path) ~= 0 then
-      if source_changed and vim.fn.writefile(state.source_lines, attachment.source_path) ~= 0 then
-        fail("could not write %s and could not restore %s", attachment.sidecar_path, attachment.source_path)
-      end
-      fail("could not write %s; source was not changed", attachment.sidecar_path)
-    end
-    table.insert(written, attachment.sidecar_path)
+  state.source_lines = written_source
+  if sidecar_changed and vim.fn.writefile(sidecar_lines, attachment.sidecar_path) ~= 0 then
+    mark_interleaved_blocks(attachment, state.blocks)
+    vim.bo[buffer].modified = true
+    fail("wrote source but could not write %s; the review edit remains pending", attachment.sidecar_path)
   end
 
-  state.source_lines = source
   attachment.review = review
   attachment.sidecar_lines = sidecar_lines
   state.pending_review = nil
-  vim.bo[buffer].modified = false
-  if #written == 0 then
-    vim.notify("No changes to write", vim.log.levels.INFO)
+  render_interleaved(attachment, written_source, true)
+  if sidecar_changed then
+    vim.notify("Wrote " .. attachment.source_path .. " and " .. attachment.sidecar_path, vim.log.levels.INFO)
   else
-    vim.notify("Wrote " .. table.concat(written, " and "), vim.log.levels.INFO)
+    vim.notify("Wrote " .. attachment.source_path, vim.log.levels.INFO)
   end
+end
+
+install_interleaved_write = function(attachment)
+  local state = attachment.interleaved
+  if not state then
+    return
+  end
+  state.write_autocmd = vim.api.nvim_create_autocmd("BufWriteCmd", {
+    buffer = attachment.source_buffer,
+    nested = true,
+    callback = function(event)
+      write_interleaved(attachment, event)
+    end,
+  })
 end
 
 local function stop_interleaved(attachment, force)
@@ -975,12 +1046,7 @@ function M.interleave(source_buffer, target_comment_index)
   if source_was_modified then
     vim.bo[source_buffer].modified = true
   end
-  state.write_autocmd = vim.api.nvim_create_autocmd("BufWriteCmd", {
-    buffer = source_buffer,
-    callback = function()
-      write_interleaved(attachment)
-    end,
-  })
+  install_interleaved_write(attachment)
 
   for _, block in ipairs(state.blocks) do
     if block.comment_index == target_comment_index then
@@ -992,6 +1058,48 @@ function M.interleave(source_buffer, target_comment_index)
   end
   vim.notify("Betwixt comments are interleaved; :w writes source and sidecar", vim.log.levels.INFO)
   return source_buffer
+end
+
+local function default_sidecar_path(source_path)
+  return source_path .. ".betwixt.md"
+end
+
+function M.comment_or_create(source_buffer, first, last, comment_type)
+  source_buffer = source_buffer or vim.api.nvim_get_current_buf()
+  if attachments[source_buffer] then
+    return M.comment(source_buffer, first, last, comment_type)
+  end
+  if not vim.api.nvim_buf_is_valid(source_buffer) or vim.bo[source_buffer].buftype ~= "" then
+    fail("comments require a normal file buffer")
+  end
+
+  local source_path = absolute(vim.api.nvim_buf_get_name(source_buffer))
+  if vim.api.nvim_buf_get_name(source_buffer) == "" or not path_exists(source_path) then
+    fail("write the source file before creating its first Betwixt comment")
+  end
+
+  local sidecar_path = default_sidecar_path(source_path)
+  local created_attachment = not path_exists(sidecar_path)
+  if created_attachment then
+    M.attach(sidecar_path, {
+      buffer = source_buffer,
+      initial_review = {
+        comments = {},
+        file = vim.fs.basename(source_path),
+      },
+    })
+  else
+    M.attach(sidecar_path, { buffer = source_buffer })
+  end
+
+  local ok, result = pcall(M.comment, source_buffer, first, last, comment_type)
+  if not ok then
+    if created_attachment then
+      M.detach(source_buffer, true)
+    end
+    error(result, 0)
+  end
+  return result
 end
 
 function M.comment(source_buffer, first, last, comment_type)
@@ -1125,8 +1233,14 @@ function M.attach(sidecar_path, options)
   end
 
   sidecar_path = absolute(sidecar_path)
-  local sidecar_lines = read_lines(sidecar_path)
-  local review = parse_sidecar(sidecar_lines, sidecar_path)
+  local sidecar_lines
+  local review
+  if options.initial_review then
+    review = vim.deepcopy(options.initial_review)
+  else
+    sidecar_lines = read_lines(sidecar_path)
+    review = parse_sidecar(sidecar_lines, sidecar_path)
+  end
   local expected_source = absolute(vim.fs.joinpath(vim.fs.dirname(sidecar_path), review.file))
   local actual_source = absolute(vim.api.nvim_buf_get_name(source_buffer))
   if expected_source ~= actual_source then
@@ -1203,6 +1317,9 @@ function M.attach(sidecar_path, options)
     buffer = source_buffer,
     group = attachment.augroup,
     callback = function()
+      if attachment.interleaved and attachment.interleaved.native_write then
+        return
+      end
       refresh_attachment(attachment, false)
     end,
   })

@@ -208,6 +208,19 @@ assert(
   #vim.api.nvim_buf_get_extmarks(original_buffer, spacer_namespace, 0, -1, { details = true }) == 0,
   "interleaved editing should remove the virtual opposite spacer"
 )
+local materialized_lines = vim.api.nvim_buf_get_lines(working_buffer, 0, -1, false)
+assert(
+  vim.tbl_contains(materialized_lines, "-- Could this be clearer?"),
+  "CodeDiff's editable working pane should contain the materialized review body"
+)
+assert(
+  vim.tbl_contains(materialized_lines, "-- ╰─ betwixt"),
+  "CodeDiff's editable working pane should contain the complete materialized frame"
+)
+assert(
+  vim.deep_equal(vim.fn.readfile(source_path), working_source),
+  "materializing inside CodeDiff must remain an in-buffer view until :write"
+)
 betwixt.virtualize(working_buffer, false)
 assert(
   #vim.api.nvim_buf_get_extmarks(original_buffer, spacer_namespace, 0, -1, { details = true }) == 1,

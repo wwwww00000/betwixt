@@ -24,3 +24,11 @@ end, {
   desc = "Project Betwixt comments onto the current source buffer",
   nargs = 1,
 })
+
+vim.api.nvim_create_user_command("BetwixtComment", function(command)
+  require("betwixt").comment_or_create(vim.api.nvim_get_current_buf(), command.line1, command.line2, command.args)
+end, {
+  desc = "Add a Betwixt comment, creating and attaching the default sidecar when needed",
+  nargs = "?",
+  range = true,
+})

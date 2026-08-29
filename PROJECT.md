@@ -18,8 +18,12 @@ synthetic fixtures. The current end-to-end path can:
 3. materialize them as source-language comments for ordinary editing;
 4. write simultaneous source and review edits to their separate files;
 5. create comments from a visual range or the cursor line;
-6. report exact anchors as current, moved, stale, or ambiguous; and
-7. preserve side-by-side alignment in the tested CodeDiff case while remaining
+6. lazily create or discover an adjacent per-source sidecar on the first
+   `:BetwixtComment`;
+7. run materialized source writes through Neovim's native write hooks while
+   keeping review lines out of the source file;
+8. report exact anchors as current, moved, stale, or ambiguous; and
+9. preserve side-by-side alignment in the tested CodeDiff case while remaining
    editable in CodeDiff and Diffview working-file panes.
 
 The plugin is still an early first slice, not a settled artifact protocol.
@@ -63,8 +67,8 @@ experiment, not committed current work.
 
 ## Open Questions
 
-- How should the first sidecar be created and discovered without prematurely
-  settling repository-wide artifact organization?
+- Does the adjacent `<source-file>.betwixt.md` default remain usable in real
+  reviews without prematurely settling repository-wide organization?
 - Is the current exact excerpt anchor adequate in real reviews where the
   targeted lines themselves change?
 - Do `status` and `type` earn their place through actual review use?

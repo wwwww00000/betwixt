@@ -33,9 +33,10 @@ the language's `commentstring`; in the Lua fixture they look like this:
 ```
 
 Edit source and comment lines with ordinary motions and undo. In this mode,
-`:w` validates the frames and writes the demultiplexed source and sidecar while
-keeping the interleaved view open. Run `:BetwixtVirtual` after saving to return
-to virtual display, or `:BetwixtVirtual!` to discard unsaved interleaved edits.
+`:w` validates the frames, passes pure source through Neovim's native write
+hooks, writes the sidecar, and keeps the interleaved view open. Run
+`:BetwixtVirtual` after saving to return to virtual display, or
+`:BetwixtVirtual!` to discard unsaved interleaved edits.
 The physical language-comment prefix remains visible so it is clear why the
 materialized review text is valid source. The header's author, status, and type
 are directly editable; the target range, anchor state, and frame boundary
@@ -102,19 +103,20 @@ state without changing the Betwixt repository. Its path is available as
 
 ## New-comment flow
 
-With a sidecar attached, visually select the smallest useful source range and
-press `<leader>rc`. The equivalent command is:
+Visually select the smallest useful source range and run:
 
 ```vim
 :'<,'>BetwixtComment [type]
 ```
 
-From Normal mode the same mapping creates a one-line comment anchored at the
-cursor. `:BetwixtComment [type]` is its command form. Both paths materialize
-the comments as syntactic source-language comments, place the cursor in a new
-blank body, and enter insert mode. The optional type defaults to `comment`,
-status defaults to `open`, and authorship comes from `setup({ author = ... })`,
-then `g:betwixt_author`, with a fallback of `human`:
+When no sidecar is attached, the command lazily uses
+`<source-file>.betwixt.md`; the file is not created until `:w`. Once attached,
+the `<leader>rc` mapping provides the same command for a visual range or the
+cursor line. Both paths materialize the comments as syntactic source-language
+comments, place the cursor in a new blank body, and enter insert mode. The
+optional type defaults to `comment`, status defaults to `open`, and authorship
+comes from `setup({ author = ... })`, then `g:betwixt_author`, with a fallback
+of `human`:
 
 ```lua
 require("betwixt").setup({ author = "reviewer" })
@@ -123,8 +125,8 @@ require("betwixt").setup({ author = "reviewer" })
 Use `:w` to persist the new sidecar comment and any ordinary source edits in
 the same operation. `:BetwixtVirtual` returns to virtual display after the
 write. Before writing, `:BetwixtVirtual!` cancels the new comment and discards
-other unsaved interleaved changes. The command currently requires an existing
-attached sidecar; creating the first sidecar is outside this slice.
+other unsaved interleaved changes. Canceling the first unwritten comment leaves
+no sidecar behind.
 
 ## Composite-buffer comparison
 

@@ -11,14 +11,13 @@ to the sidecar.
 
 ## Installation
 
-Betwixt currently has no remote release. Load a local checkout with lazy.nvim:
+Load the current main branch with lazy.nvim:
 
 ```lua
 {
-  dir = "/path/to/betwixt",
-  name = "betwixt",
+  "wwwww00000/betwixt",
   main = "betwixt",
-  cmd = { "BetwixtAttach", "BetwixtOpen" },
+  cmd = { "BetwixtAttach", "BetwixtComment", "BetwixtOpen" },
   opts = {
     author = "reviewer",
   },
@@ -39,7 +38,8 @@ require("betwixt").setup({
 
 Set either mapping to `false` to disable it. Betwixt has no required plugin
 dependencies. Its CodeDiff alignment support activates only when CodeDiff is
-already present.
+already present. The mappings are installed only after a sidecar is attached;
+the first review can begin with `:BetwixtComment`.
 
 ## Sidecar
 
@@ -70,7 +70,19 @@ stale or ambiguous. Betwixt does not rewrite stored ranges automatically.
 
 ## Workflow
 
-Open the source file, then attach its sidecar:
+Open a saved source file and create the first comment directly:
+
+```vim
+:[range]BetwixtComment [type]
+```
+
+When no review is attached, the command lazily targets an adjacent
+`<source-file>.betwixt.md` sidecar. Nothing is created merely by opening or
+editing the source. The sidecar is created by the first `:w`; discarding the
+pending comment with `:BetwixtVirtual!` leaves no file behind. A later
+`:BetwixtComment` discovers and reuses the same default sidecar.
+
+To use an existing sidecar at another path, attach it explicitly:
 
 ```vim
 :BetwixtAttach path/to/review.betwixt.md
@@ -90,25 +102,35 @@ Comments initially appear as virtual highlighted lines. Then:
 Materialized review lines use the current filetype's real line-comment syntax,
 such as `-- ` in Lua. This keeps the temporary source buffer parseable by
 Tree-sitter, LSPs, and formatters while the write hook keeps those lines out of
-the source file.
+the source file. Materialized editing currently requires a line-comment
+`commentstring`. During `:w`, Betwixt temporarily presents pure source to
+Neovim's native write path, so normal `BufWritePre` formatting and
+`BufWritePost` hooks run without seeing review lines. It then restores the
+interleaved view. The sidecar is written only after the native source write
+succeeds, so a rejected source write leaves the sidecar untouched and the
+pending buffer editable.
 
 Run `:help betwixt` for the command reference.
 
 ## Status
 
-This is an early plugin slice, tested with Neovim 0.12. The retained
-fixtures cover ordinary attachment, simultaneous source and sidecar writes,
-new-comment creation, CodeDiff alignment, and Diffview editing.
+This is an early plugin slice, tested with Neovim 0.12. The retained fixtures
+cover lazy first-comment creation, native write hooks and failure recovery, Lua,
+JavaScript, and Python comment syntax, ordinary attachment, simultaneous source
+and sidecar writes, CodeDiff alignment, and Diffview editing.
 
-Creating the first sidecar, multi-file artifact organization, automatic anchor
-migration, threads, replies, and hosted collaboration remain deliberately
-outside the current slice.
+Multi-file artifact organization, automatic anchor migration, threads,
+replies, and hosted collaboration remain deliberately outside the current
+slice.
 
 ## Development
 
 The focused checks are standalone Neovim scripts under `tests/`. The richer
 interactive launchers and their known diff-view limitations are documented in
-`experiment/README.md`.
+`experiment/README.md`. Headless viewer tests exercise actual CodeDiff and
+Diffview buffers, windows, virtual rows, materialized review lines, writes, and
+screen-row alignment. Terminal color rendering, flicker, and subjective
+interaction still require an interactive check.
 
 ## License
 
