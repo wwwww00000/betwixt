@@ -49,6 +49,12 @@ local sidecar = {
   "      return subtotal",
   "body:",
   "Could this be clearer?",
+  "",
+  "### Reply",
+  "",
+  "author: agent",
+  "body:",
+  "The intermediate name could describe the unit.",
 }
 
 assert(vim.fn.writefile(committed_source, source_path) == 0)
@@ -135,8 +141,8 @@ local spacers = vim.api.nvim_buf_get_extmarks(original_buffer, spacer_namespace,
 assert(#comments == 1 and #spacers == 1, "the comment and its opposite spacer should both be present")
 assert(comments[1][2] == 3, "the working-side anchor should move down by the inserted line")
 assert(spacers[1][2] == 2, "the original-side spacer should use the committed anchor")
-assert(#comments[1][4].virt_lines == 3, "the projected comment should occupy three virtual rows")
-assert(#spacers[1][4].virt_lines == 3, "the opposite spacer should match the comment height")
+assert(#comments[1][4].virt_lines == 5, "the projected thread should occupy five virtual rows")
+assert(#spacers[1][4].virt_lines == 5, "the opposite spacer should match the thread height")
 for _, virtual_line in ipairs(spacers[1][4].virt_lines) do
   assert(virtual_line[1][2] == "BetwixtComment", "opposite spacer rows should use the comment background")
   assert(virtual_line[1][1]:match("^ +$"), "opposite spacer rows should remain visually blank")
@@ -212,6 +218,10 @@ local materialized_lines = vim.api.nvim_buf_get_lines(working_buffer, 0, -1, fal
 assert(
   vim.tbl_contains(materialized_lines, "-- Could this be clearer?"),
   "CodeDiff's editable working pane should contain the materialized review body"
+)
+assert(
+  vim.tbl_contains(materialized_lines, "-- The intermediate name could describe the unit."),
+  "CodeDiff's editable working pane should contain the materialized reply"
 )
 assert(
   vim.tbl_contains(materialized_lines, "-- ╰─ betwixt"),

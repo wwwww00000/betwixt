@@ -17,7 +17,7 @@ Load the current main branch with lazy.nvim:
 {
   "wwwww00000/betwixt",
   main = "betwixt",
-  cmd = { "BetwixtAttach", "BetwixtComment", "BetwixtOpen" },
+  cmd = { "BetwixtAttach", "BetwixtComment", "BetwixtOpen", "BetwixtReply" },
   opts = {
     author = "reviewer",
   },
@@ -66,6 +66,12 @@ context-after:
     end
 body:
 Could this be clearer?
+
+### Reply
+
+author: reviewer
+body:
+The intermediate name could describe the unit.
 ```
 
 `anchor` is the exact selected source excerpt. New comments also retain one
@@ -79,6 +85,11 @@ edited or deleted, it is displayed as stale. Repeated excerpts remain
 ambiguous unless exactly one has the recorded context. Older exact-only
 sidecars remain valid, and Betwixt does not rewrite stored ranges, anchors, or
 context automatically.
+
+Replies form one ordered, non-nested conversation under their root comment.
+They contain only an author and body, inherit the root anchor and status, and
+do not change that status automatically. A root status of `resolved` gives the
+whole thread a muted gray background.
 
 ## Workflow
 
@@ -107,6 +118,8 @@ Comments initially appear as virtual highlighted lines. Then:
 - Visually select source lines and press `<leader>rc` to add a range comment.
 - Press `<leader>rc` in Normal mode to comment on the cursor line.
 - Use `:BetwixtComment risk` to specify a type explicitly.
+- Place the cursor in or near a comment's range and use `:BetwixtReply` to
+  append a reply and begin editing its body.
 - Use `:w` to write the source and sidecar together.
 - Use `:BetwixtVirtual` to return to virtual display.
 - Use `:BetwixtVirtual!` to discard unsaved materialized changes.
@@ -129,12 +142,20 @@ Run `:help betwixt` for the command reference.
 This is an early plugin slice, tested with Neovim 0.12. The retained fixtures
 cover lazy first-comment creation, native write hooks and failure recovery, Lua,
 JavaScript, and Python comment syntax, ordinary attachment, simultaneous source
-and sidecar writes, context-assisted anchoring under common source edits,
-CodeDiff alignment, and Diffview editing.
+and sidecar writes, linear reply creation and editing, resolved-thread
+highlighting, context-assisted anchoring under common source edits, CodeDiff
+alignment, and Diffview editing.
 
-Multi-file artifact organization, automatic anchor migration, threads,
-replies, and hosted collaboration remain deliberately outside the current
-slice.
+Multi-file artifact organization, automatic anchor migration, nested reply
+trees, automatic resolution, and hosted collaboration remain deliberately
+outside the current slice.
+
+The current slice is suitable for a controlled local pilot. It expects saved
+normal file buffers and a filetype with line-comment `commentstring`. Reopening
+an existing review still requires an explicit `:BetwixtAttach`; there is no
+automatic sidecar discovery on buffer open. CodeDiff is the better-tested live
+review path. Diffview works when Betwixt is attached to its editable working
+pane, but that attachment is also manual.
 
 ## Development
 

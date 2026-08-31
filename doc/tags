@@ -4,6 +4,7 @@
 :BetwixtEdit	betwixt.txt	/*:BetwixtEdit*
 :BetwixtOpen	betwixt.txt	/*:BetwixtOpen*
 :BetwixtRefresh	betwixt.txt	/*:BetwixtRefresh*
+:BetwixtReply	betwixt.txt	/*:BetwixtReply*
 :BetwixtToggle	betwixt.txt	/*:BetwixtToggle*
 :BetwixtVirtual	betwixt.txt	/*:BetwixtVirtual*
 betwixt	betwixt.txt	/*betwixt*

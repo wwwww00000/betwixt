@@ -37,18 +37,41 @@ end
 
 local function set_default_highlights()
   local highlight
+  local resolved_highlight
   if vim.o.background == "light" then
     highlight = { bg = "#F3DFB3", fg = "#5B3A00" }
+    resolved_highlight = { bg = "#E2E2E2", fg = "#666666" }
   else
     highlight = { bg = "#4A3418", fg = "#F2D49B" }
+    resolved_highlight = { bg = "#303030", fg = "#A0A0A0" }
   end
   highlight.default = true
+  resolved_highlight.default = true
   vim.api.nvim_set_hl(0, "BetwixtComment", highlight)
+  vim.api.nvim_set_hl(0, "BetwixtResolvedComment", resolved_highlight)
+end
+
+local function comment_highlight(comment)
+  return comment.status == "resolved" and "BetwixtResolvedComment" or "BetwixtComment"
 end
 
 local function trim_trailing_blank_lines(lines)
   while lines[#lines] == "" do
     table.remove(lines)
+  end
+end
+
+local function finish_reply(reply, path)
+  if not reply then
+    return
+  end
+
+  trim_trailing_blank_lines(reply.body)
+  if reply.author == nil or reply.author == "" then
+    fail("reply is missing author in %s", path)
+  end
+  if not reply.saw_body then
+    fail("reply is missing body in %s", path)
   end
 end
 
@@ -78,14 +101,25 @@ end
 local function parse_sidecar(lines, path)
   local review = { comments = {} }
   local comment
+  local reply
   local mode = "preamble"
 
   for line_number, line in ipairs(lines) do
     if line == "## Comment" then
+      finish_reply(reply, path)
+      reply = nil
       finish_comment(comment, path)
-      comment = { anchor = {}, body = {} }
+      comment = { anchor = {}, body = {}, replies = {} }
       table.insert(review.comments, comment)
       mode = "metadata"
+    elseif line == "### Reply" then
+      if not comment or not comment.saw_body or (mode ~= "body" and mode ~= "reply_body") then
+        fail("reply on line %d must follow a comment body in %s", line_number, path)
+      end
+      finish_reply(reply, path)
+      reply = { body = {} }
+      table.insert(comment.replies, reply)
+      mode = "reply_metadata"
     elseif not comment then
       local file = line:match("^file:%s*(.-)%s*$")
       if file and file ~= "" then
@@ -135,6 +169,19 @@ local function parse_sidecar(lines, path)
       end
     elseif mode == "body" then
       table.insert(comment.body, line)
+    elseif mode == "reply_body" then
+      table.insert(reply.body, line)
+    elseif mode == "reply_metadata" then
+      if line == "body:" then
+        reply.saw_body = true
+        mode = "reply_body"
+      elseif line ~= "" then
+        local author = line:match("^author:%s*(.-)%s*$")
+        if not author then
+          fail("unrecognized reply metadata on line %d in %s", line_number, path)
+        end
+        reply.author = author
+      end
     elseif line == "anchor:" then
       comment.saw_anchor = true
       mode = "anchor"
@@ -159,6 +206,7 @@ local function parse_sidecar(lines, path)
     end
   end
 
+  finish_reply(reply, path)
   finish_comment(comment, path)
 
   if not review.file then
@@ -201,6 +249,16 @@ local function serialize_sidecar(review)
     end
     table.insert(lines, "body:")
     vim.list_extend(lines, comment.body)
+    for _, comment_reply in ipairs(comment.replies or {}) do
+      vim.list_extend(lines, {
+        "",
+        "### Reply",
+        "",
+        "author: " .. comment_reply.author,
+        "body:",
+      })
+      vim.list_extend(lines, comment_reply.body)
+    end
     table.insert(lines, "")
   end
 
@@ -341,6 +399,60 @@ local function metadata_from_header(review, comment, resolved, header)
   return edited.author, edited.status, edited.type
 end
 
+local function reply_header(reply)
+  return "├─ reply · " .. reply.author
+end
+
+local function author_from_reply_header(reply, header)
+  local author = header:match("^├─ reply · (.+)$")
+  if not author then
+    fail("reply header must retain the Betwixt reply shape")
+  end
+  author = metadata_value("reply author", author)
+  local edited = vim.deepcopy(reply)
+  edited.author = author
+  if header ~= reply_header(edited) then
+    fail("only reply authors are editable in reply headers")
+  end
+  return author
+end
+
+local function line_slice(lines, first, last)
+  if first > last then
+    return {}
+  end
+  return vim.list_slice(lines, first, last)
+end
+
+local function collect_thread(comment, content)
+  local replies = comment.replies or {}
+  if #replies == 0 then
+    comment.body = content
+    trim_trailing_blank_lines(comment.body)
+    return
+  end
+
+  local reply_rows = {}
+  for index, line in ipairs(content) do
+    if line:match("^├─ reply · ") then
+      table.insert(reply_rows, index)
+    end
+  end
+  if #reply_rows ~= #replies then
+    fail("reply separators are not editable; expected %d but found %d", #replies, #reply_rows)
+  end
+
+  comment.body = line_slice(content, 1, reply_rows[1] - 1)
+  trim_trailing_blank_lines(comment.body)
+  for index, comment_reply in ipairs(replies) do
+    local start_row = reply_rows[index]
+    local end_row = (reply_rows[index + 1] or (#content + 1)) - 1
+    comment_reply.author = author_from_reply_header(comment_reply, content[start_row])
+    comment_reply.body = line_slice(content, start_row + 1, end_row)
+    trim_trailing_blank_lines(comment_reply.body)
+  end
+end
+
 local function render(review, source, placement)
   local groups = {}
 
@@ -373,11 +485,26 @@ local function render(review, source, placement)
       local start_row = #output
       table.insert(output, header)
       vim.list_extend(output, item.comment.body)
+      local reply_blocks = {}
+      for reply_index, comment_reply in ipairs(item.comment.replies or {}) do
+        local reply_start_row = #output
+        local rendered_reply_header = reply_header(comment_reply)
+        table.insert(output, rendered_reply_header)
+        vim.list_extend(output, comment_reply.body)
+        table.insert(reply_blocks, {
+          end_row = #output,
+          header = rendered_reply_header,
+          reply_index = reply_index,
+          start_row = reply_start_row,
+        })
+      end
       table.insert(output, footer)
       table.insert(blocks, {
         comment_index = item.comment_index,
         header = header,
+        highlight_group = comment_highlight(item.comment),
         footer = footer,
+        replies = reply_blocks,
         resolved = item.resolved,
         start_row = start_row,
         end_row = #output,
@@ -412,7 +539,7 @@ local function render_into_buffer(buffer, session)
       end_col = 0,
       end_right_gravity = true,
       hl_eol = true,
-      hl_group = "BetwixtComment",
+      hl_group = block.highlight_group,
       priority = 200,
       right_gravity = false,
     })
@@ -470,11 +597,11 @@ local function collect_edits(buffer, session)
     local comment = session.review.comments[region.block.comment_index]
     comment.author, comment.status, comment.type =
       metadata_from_header(session.review, comment, region.block.resolved, header)
-    local body = {}
+    local content = {}
     for index = region.start_row + 2, region.end_row - 1 do
-      table.insert(body, lines[index])
+      table.insert(content, lines[index])
     end
-    comment.body = body
+    collect_thread(comment, content)
     cursor = region.end_row + 1
   end
 
@@ -609,7 +736,7 @@ local function mark_interleaved_blocks(attachment, blocks)
       end_col = 0,
       end_right_gravity = true,
       hl_eol = true,
-      hl_group = "BetwixtComment",
+      hl_group = block.highlight_group,
       priority = 200,
       right_gravity = false,
     })
@@ -623,6 +750,11 @@ local function render_interleaved(attachment, source, preserve_undo)
   for _, comment in ipairs(display_review.comments) do
     if #comment.body == 0 then
       comment.body = { "" }
+    end
+    for _, comment_reply in ipairs(comment.replies or {}) do
+      if #comment_reply.body == 0 then
+        comment_reply.body = { "" }
+      end
     end
   end
   local lines, blocks = render(display_review, source, attachment.placement)
@@ -699,12 +831,11 @@ local function collect_interleaved(attachment)
     local decoded_header = decode_comment_line(attachment.interleaved.leader, header)
     comment.author, comment.status, comment.type =
       metadata_from_header(review, comment, region.block.resolved, decoded_header)
-    local body = {}
+    local content = {}
     for index = region.start_row + 2, region.end_row - 1 do
-      table.insert(body, decode_comment_line(attachment.interleaved.leader, lines[index]))
+      table.insert(content, decode_comment_line(attachment.interleaved.leader, lines[index]))
     end
-    trim_trailing_blank_lines(body)
-    comment.body = body
+    collect_thread(comment, content)
     cursor = region.end_row + 1
   end
 
@@ -861,9 +992,9 @@ local function source_window(buffer)
   end
 end
 
-local function pad_virtual_line(text, width)
+local function pad_virtual_line(text, width, highlight_group)
   local padding = math.max(1, width - vim.fn.strdisplaywidth(text))
-  return { { text .. string.rep(" ", padding), "BetwixtComment" } }
+  return { { text .. string.rep(" ", padding), highlight_group or "BetwixtComment" } }
 end
 
 local function refresh_codediff_scroll(tabpage, leader)
@@ -955,7 +1086,7 @@ local function render_codediff_spacers(attachment, tabpage)
 
       local virtual_lines = {}
       for _ = 1, item.virtual_line_count do
-        table.insert(virtual_lines, pad_virtual_line("", width))
+        table.insert(virtual_lines, pad_virtual_line("", width, item.highlight_group))
       end
       local mark = vim.api.nvim_buf_set_extmark(original_buffer, codediff_spacer_namespace, line - 1, 0, {
         priority = 200,
@@ -1015,15 +1146,22 @@ render_virtual_comments = function(attachment)
     local resolved = resolve_anchor(source, comment)
     local line = attachment.placement == "before" and resolved.first or resolved.last
     line = math.max(1, math.min(line, math.max(1, #source)))
+    local highlight_group = comment_highlight(comment)
 
     local virtual_lines = {
-      pad_virtual_line(comment_header(attachment.review, comment, resolved), width),
+      pad_virtual_line(comment_header(attachment.review, comment, resolved), width, highlight_group),
     }
     for _, body_line in ipairs(comment.body) do
-      table.insert(virtual_lines, pad_virtual_line(body_line, width))
+      table.insert(virtual_lines, pad_virtual_line(body_line, width, highlight_group))
+    end
+    for _, comment_reply in ipairs(comment.replies or {}) do
+      table.insert(virtual_lines, pad_virtual_line(reply_header(comment_reply), width, highlight_group))
+      for _, body_line in ipairs(comment_reply.body) do
+        table.insert(virtual_lines, pad_virtual_line(body_line, width, highlight_group))
+      end
     end
     local edit_hint = settings.mappings.edit and settings.mappings.edit .. " edit" or ":BetwixtEdit"
-    table.insert(virtual_lines, pad_virtual_line("╰─ betwixt · " .. edit_hint, width))
+    table.insert(virtual_lines, pad_virtual_line("╰─ betwixt · " .. edit_hint, width, highlight_group))
 
     local mark = vim.api.nvim_buf_set_extmark(buffer, virtual_namespace, line - 1, 0, {
       priority = 200,
@@ -1035,6 +1173,7 @@ render_virtual_comments = function(attachment)
 
     table.insert(attachment.items, {
       comment_index = index,
+      highlight_group = highlight_group,
       mark = mark,
       resolved = resolved,
       virtual_line_count = #virtual_lines,
@@ -1089,7 +1228,7 @@ local function refresh_attachment(attachment, reload_sidecar)
   render_virtual_comments(attachment)
 end
 
-function M.interleave(source_buffer, target_comment_index)
+function M.interleave(source_buffer, target_comment_index, target_reply_index)
   source_buffer = source_buffer or vim.api.nvim_get_current_buf()
   local attachment = attachments[source_buffer]
   if not attachment then
@@ -1130,7 +1269,16 @@ function M.interleave(source_buffer, target_comment_index)
 
   for _, block in ipairs(state.blocks) do
     if block.comment_index == target_comment_index then
-      local body_row = math.min(block.start_row + 2, block.end_row)
+      local body_row
+      if target_reply_index then
+        local reply_block = block.replies[target_reply_index]
+        if not reply_block then
+          fail("reply %d is not available in comment %d", target_reply_index, target_comment_index)
+        end
+        body_row = math.min(reply_block.start_row + 2, reply_block.end_row)
+      else
+        body_row = math.min(block.start_row + 2, block.end_row)
+      end
       local body_line = vim.api.nvim_buf_get_lines(source_buffer, body_row - 1, body_row, false)[1] or ""
       vim.api.nvim_win_set_cursor(source_win, { body_row, math.min(#body_line, #state.leader + 1) })
       break
@@ -1224,6 +1372,7 @@ function M.comment(source_buffer, first, last, comment_type)
     context_before = first > 1 and { source[first - 1] } or {},
     first = first,
     last = last,
+    replies = {},
     status = "open",
     type = comment_type,
   })
@@ -1231,6 +1380,58 @@ function M.comment(source_buffer, first, last, comment_type)
 
   local comment_index = #review.comments
   local ok, result = pcall(M.interleave, source_buffer, comment_index)
+  if not ok then
+    attachment.review = previous_review
+    if attachment.interleaved then
+      vim.api.nvim_buf_clear_namespace(source_buffer, interleaved_namespace, 0, -1)
+      replace_buffer_lines(source_buffer, source)
+      vim.bo[source_buffer].modified = source_was_modified
+    end
+    attachment.interleaved = nil
+    render_virtual_comments(attachment)
+    error(result, 0)
+  end
+
+  attachment.interleaved.pending_review = previous_review
+  vim.bo[source_buffer].modified = true
+  vim.schedule(function()
+    if
+      attachments[source_buffer] == attachment
+      and attachment.interleaved
+      and vim.api.nvim_get_current_buf() == source_buffer
+    then
+      vim.cmd("startinsert!")
+    end
+  end)
+  return source_buffer
+end
+
+function M.reply(source_buffer)
+  source_buffer = source_buffer or vim.api.nvim_get_current_buf()
+  local attachment = attachments[source_buffer]
+  if not attachment then
+    fail("current buffer has no Betwixt attachment")
+  end
+  if attachment.interleaved then
+    fail("finish the current interleaved edit before adding a reply")
+  end
+
+  local source_was_modified = vim.bo[source_buffer].modified
+  local source = source_buffer_lines(source_buffer)
+  local item = nearest_virtual_comment(attachment)
+  local author = metadata_value("author", settings.author or vim.g.betwixt_author or "human")
+  local previous_review = attachment.review
+  local review = vim.deepcopy(previous_review)
+  local comment = review.comments[item.comment_index]
+  comment.replies = comment.replies or {}
+  table.insert(comment.replies, {
+    author = author,
+    body = {},
+  })
+  attachment.review = review
+
+  local reply_index = #comment.replies
+  local ok, result = pcall(M.interleave, source_buffer, item.comment_index, reply_index)
   if not ok then
     attachment.review = previous_review
     if attachment.interleaved then
@@ -1293,6 +1494,7 @@ function M.detach(source_buffer, force)
     vim.api.nvim_buf_clear_namespace(source_buffer, virtual_namespace, 0, -1)
     pcall(vim.api.nvim_buf_del_user_command, source_buffer, "BetwixtEdit")
     pcall(vim.api.nvim_buf_del_user_command, source_buffer, "BetwixtComment")
+    pcall(vim.api.nvim_buf_del_user_command, source_buffer, "BetwixtReply")
     pcall(vim.api.nvim_buf_del_user_command, source_buffer, "BetwixtToggle")
     pcall(vim.api.nvim_buf_del_user_command, source_buffer, "BetwixtVirtual")
     pcall(vim.api.nvim_buf_del_user_command, source_buffer, "BetwixtRefresh")
@@ -1363,6 +1565,9 @@ function M.attach(sidecar_path, options)
     nargs = "?",
     range = true,
   })
+  vim.api.nvim_buf_create_user_command(source_buffer, "BetwixtReply", function()
+    M.reply(source_buffer)
+  end, { desc = "Reply to the nearest Betwixt comment" })
   vim.api.nvim_buf_create_user_command(source_buffer, "BetwixtToggle", function()
     M.toggle(source_buffer)
   end, { desc = "Toggle virtual and interleaved Betwixt comments" })

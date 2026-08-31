@@ -128,6 +128,13 @@ write. Before writing, `:BetwixtVirtual!` cancels the new comment and discards
 other unsaved interleaved changes. Canceling the first unwritten comment leaves
 no sidecar behind.
 
+With the cursor in or near a projected comment's source range, run
+`:BetwixtReply` to append a linear reply. The command materializes the thread
+and places the cursor in the new reply body. Reply authors and bodies are
+directly editable; the reply separator remains structural. Changing the root
+status to `resolved` and writing the buffer gives the complete thread a muted
+gray background without changing its anchor or implying acceptance.
+
 ## Composite-buffer comparison
 
 The earlier physical-line experiment remains available with:

@@ -61,6 +61,12 @@ COMMANDS                                                    *betwixt-commands*
         An existing default sidecar is discovered and attached. The new body
         is materialized for immediate editing.
 
+                                                    *:BetwixtReply*
+:BetwixtReply
+        Append an attributed reply to the nearest projected comment and
+        materialize its empty body for immediate editing. Replies inherit the
+        root comment's anchor and status.
+
 The following commands are local to an attached source buffer:
 
                                                      *:BetwixtEdit*
@@ -93,6 +99,11 @@ indented `anchor`, optional indented `context-before` and `context-after`, and
 a verbatim `body`. New comments capture one immediately adjacent context line
 on each side. An empty context block records a file boundary.
 
+A comment may contain ordered `### Reply` sections after its body. Each reply
+contains an `author` and `body`. Replies are linear rather than nested and do
+not carry their own anchor, status, type, ID, or timestamp. Adding a reply does
+not change the root status.
+
 The default first-comment flow places the sidecar beside its source as
 `<source-file>.betwixt.md`. Explicitly attached sidecars may use another name.
 
@@ -102,5 +113,9 @@ relocated anchor as moved, an edited or deleted target as stale, and repeated
 anchors without one contextual match as ambiguous. Older exact-only sidecars
 remain valid. Betwixt does not automatically rewrite stored ranges, anchors,
 or context.
+
+Comments whose root status is not `resolved` use the amber comment highlight.
+A root status of `resolved` uses a muted gray highlight for the complete
+comment and its replies.
 
 vim:tw=78:ts=8:noet:ft=help:norl:

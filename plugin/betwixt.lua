@@ -32,3 +32,9 @@ end, {
   nargs = "?",
   range = true,
 })
+
+vim.api.nvim_create_user_command("BetwixtReply", function()
+  require("betwixt").reply(vim.api.nvim_get_current_buf())
+end, {
+  desc = "Reply to the nearest attached Betwixt comment",
+})

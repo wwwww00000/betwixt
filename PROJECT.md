@@ -23,11 +23,13 @@ synthetic fixtures. The current end-to-end path can:
 7. run materialized source writes through Neovim's native write hooks while
    keeping review lines out of the source file;
 8. report context-assisted exact anchors as current, moved, stale, or
-   ambiguous; and
-9. preserve side-by-side alignment in the tested CodeDiff case while remaining
+   ambiguous;
+9. keep a linear sequence of attributed replies under a root comment and mute
+   threads whose root status is `resolved`; and
+10. preserve side-by-side alignment in the tested CodeDiff case while remaining
    editable in CodeDiff and Diffview working-file panes.
 
-The plugin is still an early first slice, not a settled artifact protocol.
+The plugin is still an early working slice, not a settled artifact protocol.
 The fixtures under `experiment/` retain comparison cases and known viewer
 limitations.
 
@@ -39,15 +41,17 @@ limitations.
   existing only as UI state.
 - A comment may target a range even though the projection must choose one
   visual boundary at which to display it.
+- Replies are ordered children of one root comment and inherit its anchor and
+  status; replying does not change that status automatically.
 - Permission to comment does not grant permission to edit reviewed source.
 - No dependency stack, database, hosted service, or generalized protocol has
   been selected.
 
 ## Deliberately Deferred
 
-- threads and replies;
+- nested reply trees, stable reply identities, and per-reply status;
 - generalized collaboration or forge integration;
-- a settled resolution or acceptance model;
+- automatic resolution or acceptance transitions;
 - automatic anchor migration;
 - permanent per-file, per-review, or repository-wide storage organization.
 
@@ -72,6 +76,18 @@ rewriting stored anchors, continuously reclassifying every edit, fuzzy matching
 edited targets, and adopting Doubt's broader session model remain out of scope
 until use of this smaller approach provides evidence for them.
 
+## Current Reply Experiment
+
+A comment may contain an ordered series of `### Reply` sections. Each reply has
+only visible authorship and a body, inherits the root comment's anchor, and is
+displayed inside the same highlighted block. `:BetwixtReply` appends a reply to
+the nearest projected comment and materializes its body for direct editing.
+
+The root status remains a separate explicit edit. A status of `resolved` mutes
+the complete thread with a gray highlight, but adding a reply neither resolves
+nor reopens it. Nested replies, reply IDs, timestamps, reactions, per-reply
+status, and automatic transitions remain outside this experiment.
+
 ## Open Questions
 
 - Does the adjacent `<source-file>.betwixt.md` default remain usable in real
@@ -79,6 +95,8 @@ until use of this smaller approach provides evidence for them.
 - Should a later bounded experiment help recover anchors when the targeted
   lines themselves change, or is an explicit stale state safer?
 - Do `status` and `type` earn their place through actual review use?
+- Is nearest-comment targeting sufficient for replies when several comments
+  share or overlap a range?
 - Is after-range display still the right default outside the synthetic cases?
 - Is temporary diff rematching during materialized editing acceptable in
   longer CodeDiff sessions?

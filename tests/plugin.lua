@@ -3,6 +3,7 @@ vim.cmd("runtime plugin/betwixt.lua")
 assert(vim.g.loaded_betwixt, "the runtime plugin should set its load guard")
 assert(vim.fn.exists(":BetwixtAttach") == 2, "the runtime plugin should define :BetwixtAttach")
 assert(vim.fn.exists(":BetwixtComment") == 2, "the runtime plugin should define :BetwixtComment")
+assert(vim.fn.exists(":BetwixtReply") == 2, "the runtime plugin should define :BetwixtReply")
 assert(vim.fn.exists(":BetwixtOpen") == 2, "the runtime plugin should define :BetwixtOpen")
 
 vim.cmd("runtime plugin/betwixt.lua")

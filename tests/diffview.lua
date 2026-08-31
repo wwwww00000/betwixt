@@ -35,6 +35,12 @@ local sidecar = {
   "      return subtotal",
   "body:",
   "Could this be clearer?",
+  "",
+  "### Reply",
+  "",
+  "author: agent",
+  "body:",
+  "The intermediate name could describe the unit.",
 }
 
 assert(vim.fn.writefile(committed_source, source_path) == 0)
@@ -88,20 +94,28 @@ vim.api.nvim_win_set_cursor(source_win, { 2, 0 })
 betwixt.interleave(attached_buffer)
 local interleaved = vim.api.nvim_buf_get_lines(attached_buffer, 0, -1, false)
 local body_row
+local reply_row
 for index, line in ipairs(interleaved) do
   if line == "-- Could this be clearer?" then
     body_row = index
-    break
+  elseif line == "-- The intermediate name could describe the unit." then
+    reply_row = index
   end
 end
 assert(body_row, "Diffview should contain the syntactically commented interleaved body")
+assert(reply_row, "Diffview should contain the syntactically commented reply")
 vim.api.nvim_buf_set_lines(attached_buffer, body_row - 1, body_row, false, { "-- Edited from inside Diffview." })
+vim.api.nvim_buf_set_lines(attached_buffer, reply_row - 1, reply_row, false, { "-- Reply edited inside Diffview." })
 vim.api.nvim_buf_call(attached_buffer, function()
   vim.cmd("write")
 end)
 assert(
   table.concat(vim.fn.readfile(sidecar_path), "\n"):find("Edited from inside Diffview%.") ~= nil,
   "Diffview same-buffer edit should persist the sidecar"
+)
+assert(
+  table.concat(vim.fn.readfile(sidecar_path), "\n"):find("Reply edited inside Diffview%.") ~= nil,
+  "Diffview reply edits should persist in the sidecar"
 )
 assert(
   vim.deep_equal(vim.fn.readfile(source_path), working_source),
