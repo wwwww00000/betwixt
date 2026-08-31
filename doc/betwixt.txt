@@ -15,7 +15,7 @@ INTRODUCTION                                                          *betwixt*
 
 Betwixt projects review comments from a repository-co-located plain-text
 sidecar into a normal source buffer. Comments begin as virtual highlighted
-lines and can be materialized as real source-language comment lines for direct
+lines and can be materialized as source-language comment sections for direct
 editing. |:write| separates source and review lines and writes each backing
 file. The source is passed through Neovim's native write path without the
 review lines, so normal write hooks continue to see ordinary source text.
@@ -150,15 +150,17 @@ spacer. CodeDiff's `t` mapping toggles side-by-side and inline layouts.
 ===============================================================================
 FILETYPES                                                *betwixt-filetypes*
 
-Materialized editing requires a prefix-only line-comment `commentstring`.
-The automated suite covers Lua (`-- %s`) end to end, JavaScript (`// %s`) for
-materialized editing and separated writes, and Python (`# %s`) for lazy first
-comments and materialized editing.
+Materialized editing requires a usable `commentstring`. Prefix-only forms add
+the prefix to every projected line. Paired forms put their opening and closing
+tokens on separate protected lines outside the aligned Betwixt frame; its
+header, body, replies, and footer remain prefix-free.
 
-Neovim's Markdown `commentstring` is `<!-- %s -->`. This paired block-comment
-shape is not currently supported by |:BetwixtComment|, |:BetwixtReply|, or
-|:BetwixtEdit|. An existing Markdown sidecar may still be attached for virtual
-display because that mode does not insert comment syntax into the buffer. The
-usual create-and-edit flow is therefore unavailable in a Markdown buffer.
+The automated suite covers Lua (`-- %s`) end to end, JavaScript (`// %s`) for
+materialized editing and separated writes, Python (`# %s`) for lazy first
+comments and materialized editing, and Markdown (`<!-- %s -->`) for comment
+and reply creation, paired materialization, delimiter safety, and separated
+writes. Paired review text may not contain either comment delimiter. In
+Markdown fenced code blocks the HTML-comment frame is literal code and may be
+visible in a live preview even though it is removed from the written source.
 
 vim:tw=78:ts=8:noet:ft=help:norl:

@@ -694,7 +694,7 @@ local function replace_buffer_lines(buffer, lines)
   vim.bo[buffer].undolevels = undo_levels
 end
 
-local function line_comment_leader(buffer)
+local function materialization_codec(buffer)
   local commentstring = vim.bo[buffer].commentstring
   local before, after = commentstring:match("^(.-)%%s(.-)$")
   if not before then
@@ -703,28 +703,92 @@ local function line_comment_leader(buffer)
 
   before = before:gsub("%s+$", "")
   after = after:gsub("^%s+", "")
-  if before == "" or after ~= "" then
-    fail("interleaved editing currently requires a line-comment 'commentstring', got %q", commentstring)
+  if before == "" then
+    fail("buffer has no usable 'commentstring'")
   end
-  return before
+  if after == "" then
+    return { kind = "line", open = before }
+  end
+  return { close = after, kind = "paired", open = before }
 end
 
-local function encode_comment_line(leader, text)
+local function validate_paired_text(codec, text)
+  if text:find(codec.open, 1, true) then
+    fail("paired-comment review text must not contain its opening delimiter %q", codec.open)
+  end
+  if text:find(codec.close, 1, true) then
+    fail("paired-comment review text must not contain its closing delimiter %q", codec.close)
+  end
+end
+
+local function encode_comment_line(codec, text)
+  if codec.kind == "paired" then
+    validate_paired_text(codec, text)
+    return text
+  end
   if text == "" then
-    return leader .. " "
+    return codec.open .. " "
   end
-  return leader .. " " .. text
+  return codec.open .. " " .. text
 end
 
-local function decode_comment_line(leader, line)
-  if line == leader then
+local function decode_comment_line(codec, line)
+  if codec.kind == "paired" then
+    validate_paired_text(codec, line)
+    return line
+  end
+  if line == codec.open then
     return ""
   end
-  local prefix = leader .. " "
+  local prefix = codec.open .. " "
   if line:sub(1, #prefix) ~= prefix then
     fail("every interleaved comment line must begin with %q", prefix)
   end
   return line:sub(#prefix + 1)
+end
+
+local function encode_comment_header(codec, text)
+  if codec.kind == "paired" then
+    validate_paired_text(codec, text)
+    return text
+  end
+  return encode_comment_line(codec, text)
+end
+
+local function decode_comment_header(codec, line)
+  if codec.kind == "paired" then
+    validate_paired_text(codec, line)
+    return line
+  end
+  return decode_comment_line(codec, line)
+end
+
+local function encode_comment_footer(codec, text)
+  if codec.kind == "paired" then
+    validate_paired_text(codec, text)
+    return text
+  end
+  return encode_comment_line(codec, text)
+end
+
+local function wrap_paired_blocks(lines, blocks, codec)
+  local added_rows = 0
+  for _, block in ipairs(blocks) do
+    block.start_row = block.start_row + added_rows
+    block.end_row = block.end_row + added_rows
+    for _, reply_block in ipairs(block.replies) do
+      reply_block.start_row = reply_block.start_row + added_rows + 1
+      reply_block.end_row = reply_block.end_row + added_rows + 1
+    end
+
+    table.insert(lines, block.start_row + 1, codec.open)
+    block.end_row = block.end_row + 1
+    table.insert(lines, block.end_row + 1, codec.close)
+    block.end_row = block.end_row + 1
+    block.opening = codec.open
+    block.closing = codec.close
+    added_rows = added_rows + 2
+  end
 end
 
 local function mark_interleaved_blocks(attachment, blocks)
@@ -758,12 +822,27 @@ local function render_interleaved(attachment, source, preserve_undo)
     end
   end
   local lines, blocks = render(display_review, source, attachment.placement)
+  if state.codec.kind == "paired" then
+    wrap_paired_blocks(lines, blocks, state.codec)
+  end
 
   for _, block in ipairs(blocks) do
-    for index = block.start_row + 1, block.end_row do
-      lines[index] = encode_comment_line(state.leader, lines[index])
+    local header_row = block.start_row + 1
+    local body_start_row = block.start_row + 2
+    local footer_row = block.end_row
+    if state.codec.kind == "paired" then
+      header_row = header_row + 1
+      body_start_row = body_start_row + 1
+      footer_row = footer_row - 1
     end
-    block.header = lines[block.start_row + 1]
+
+    lines[header_row] = encode_comment_header(state.codec, lines[header_row])
+    for index = body_start_row, footer_row - 1 do
+      lines[index] = encode_comment_line(state.codec, lines[index])
+    end
+    lines[footer_row] = encode_comment_footer(state.codec, lines[footer_row])
+    block.header = lines[header_row]
+    block.frame_footer = lines[footer_row]
     block.footer = lines[block.end_row]
   end
 
@@ -821,19 +900,31 @@ local function collect_interleaved(attachment)
       table.insert(source, lines[index])
     end
 
-    local header = lines[region.start_row + 1]
-    local footer = lines[region.end_row]
-    if footer ~= region.block.footer then
+    local codec = attachment.interleaved.codec
+    local header_row = region.start_row + 1
+    local content_start_row = region.start_row + 2
+    local content_end_row = region.end_row - 1
+    local frame_footer_row = region.end_row
+    if codec.kind == "paired" then
+      if lines[region.start_row + 1] ~= region.block.opening or lines[region.end_row] ~= region.block.closing then
+        fail("interleaved paired-comment delimiters are not editable")
+      end
+      header_row = header_row + 1
+      content_start_row = content_start_row + 1
+      content_end_row = content_end_row - 1
+      frame_footer_row = frame_footer_row - 1
+    end
+    if lines[frame_footer_row] ~= region.block.frame_footer then
       fail("interleaved comment boundaries are not editable")
     end
 
     local comment = review.comments[region.block.comment_index]
-    local decoded_header = decode_comment_line(attachment.interleaved.leader, header)
+    local decoded_header = decode_comment_header(codec, lines[header_row])
     comment.author, comment.status, comment.type =
       metadata_from_header(review, comment, region.block.resolved, decoded_header)
     local content = {}
-    for index = region.start_row + 2, region.end_row - 1 do
-      table.insert(content, decode_comment_line(attachment.interleaved.leader, lines[index]))
+    for index = content_start_row, content_end_row do
+      table.insert(content, decode_comment_line(codec, lines[index]))
     end
     collect_thread(comment, content)
     cursor = region.end_row + 1
@@ -1257,11 +1348,15 @@ function M.interleave(source_buffer, target_comment_index, target_reply_index)
     target_comment_index = item.comment_index
   end
   local state = {
-    leader = line_comment_leader(source_buffer),
+    codec = materialization_codec(source_buffer),
     source_lines = disk_source,
   }
   attachment.interleaved = state
-  render_interleaved(attachment, source)
+  local rendered, render_error = pcall(render_interleaved, attachment, source)
+  if not rendered then
+    attachment.interleaved = nil
+    error(render_error, 0)
+  end
   if source_was_modified then
     vim.bo[source_buffer].modified = true
   end
@@ -1277,10 +1372,12 @@ function M.interleave(source_buffer, target_comment_index, target_reply_index)
         end
         body_row = math.min(reply_block.start_row + 2, reply_block.end_row)
       else
-        body_row = math.min(block.start_row + 2, block.end_row)
+        local body_offset = state.codec.kind == "paired" and 3 or 2
+        body_row = math.min(block.start_row + body_offset, block.end_row)
       end
       local body_line = vim.api.nvim_buf_get_lines(source_buffer, body_row - 1, body_row, false)[1] or ""
-      vim.api.nvim_win_set_cursor(source_win, { body_row, math.min(#body_line, #state.leader + 1) })
+      local body_column = state.codec.kind == "line" and #state.codec.open + 1 or 0
+      vim.api.nvim_win_set_cursor(source_win, { body_row, math.min(#body_line, body_column) })
       break
     end
   end

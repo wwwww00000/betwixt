@@ -2,8 +2,8 @@
 
 Betwixt is an early local-first Neovim code-review plugin. Review comments live
 in a plain-text sidecar beside the reviewed source, appear as highlighted
-line-adjacent sections, and can temporarily become ordinary syntactic comment
-lines for direct editing.
+line-adjacent sections, and can temporarily become syntactic comment sections
+for direct editing.
 
 The source buffer remains the real working-file buffer. In materialized mode,
 one `:w` separates and writes source edits to the source file and review edits
@@ -126,16 +126,17 @@ Comments initially appear as virtual highlighted lines. Then:
 - Use `:BetwixtVirtual` to return to virtual display.
 - Use `:BetwixtVirtual!` to discard unsaved materialized changes.
 
-Materialized review lines use the current filetype's real line-comment syntax,
-such as `-- ` in Lua. This keeps the temporary source buffer parseable by
-Tree-sitter, LSPs, and formatters while the write hook keeps those lines out of
-the source file. Materialized editing currently requires a line-comment
-`commentstring`. During `:w`, Betwixt temporarily presents pure source to
-Neovim's native write path, so normal `BufWritePre` formatting and
-`BufWritePost` hooks run without seeing review lines. It then restores the
-interleaved view. The sidecar is written only after the native source write
-succeeds, so a rejected source write leaves the sidecar untouched and the
-pending buffer editable.
+Materialization uses the current filetype's `commentstring`. Prefix-only forms,
+such as Lua's `-- %s`, prefix every review line. Paired forms put their opening
+and closing tokens on separate protected lines outside the aligned Betwixt
+frame, leaving the header, body, replies, and footer prefix-free. This keeps the
+temporary source buffer parseable while the write hook keeps the complete
+review section out of the source file. During `:w`, Betwixt temporarily
+presents pure source to Neovim's native write path, so normal `BufWritePre`
+formatting and `BufWritePost` hooks run without seeing review lines. It then
+restores the interleaved view. The sidecar is written only after the native
+source write succeeds, so a rejected source write leaves the sidecar untouched
+and the pending buffer editable.
 
 ### CodeDiff review
 
@@ -158,22 +159,33 @@ ambiguous anchors do not receive a speculative opposite spacer.
 
 ### Filetype support
 
-Materialized editing requires a prefix-only line-comment `commentstring`.
-Current automated coverage is:
+Materialized editing requires a usable `commentstring`. Current automated
+coverage is:
 
 | Filetype | Neovim `commentstring` | Tested coverage |
 | --- | --- | --- |
 | Lua | `-- %s` | Full comment, reply, anchoring, write, CodeDiff, and Diffview flows |
 | JavaScript | `// %s` | Materialized comment editing and source/sidecar separation |
 | Python | `# %s` | Lazy first-comment creation and materialized editing |
-| Markdown | `<!-- %s -->` | Existing sidecar display only; the normal authoring flow is unsupported |
+| Markdown | `<!-- %s -->` | Comment and reply creation, prefix-free materialized editing, delimiter safety, and separated writes |
 
-Markdown uses a paired block comment rather than a line-comment prefix.
-Supporting it requires a separate block-comment materialization experiment;
-`:BetwixtComment`, `:BetwixtReply`, and `:BetwixtEdit` currently reject that
-filetype before changing either file. In other words, an already-authored
-Markdown sidecar can be attached and viewed, but comments cannot yet be created
-from a Markdown buffer with the usual Betwixt flow.
+In Markdown, a materialized thread looks like this:
+
+```markdown
+<!--
+╭─ betwixt · reviewer · open · comment · notes.md:3-3
+Could this be more direct?
+╰─ betwixt
+-->
+```
+
+The HTML-comment delimiters live on their own protected boundary lines. Review
+text containing `<!--` or `-->` is rejected rather than silently escaped.
+CommonMark treats an HTML comment inside a fenced code block as literal code,
+so a thread materialized there may appear in a live Markdown preview even
+though Betwixt still removes it from the source on write. Automated Markdown
+coverage currently targets ordinary prose; lists, block quotes, fenced code,
+and editor-specific preview behavior remain useful live-trial cases.
 
 Run `:help betwixt` for the command reference.
 
@@ -191,7 +203,7 @@ trees, automatic resolution, and hosted collaboration remain deliberately
 outside the current slice.
 
 The current slice is suitable for a controlled local pilot. It expects saved
-normal file buffers and a filetype with line-comment `commentstring`. Reopening
+normal file buffers and a filetype with a usable `commentstring`. Reopening
 an existing review still requires an explicit `:BetwixtAttach`; there is no
 automatic sidecar discovery on buffer open. CodeDiff is the better-tested live
 review path. Diffview works when Betwixt is attached to its editable working

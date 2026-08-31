@@ -37,14 +37,15 @@ Edit source and comment lines with ordinary motions and undo. In this mode,
 hooks, writes the sidecar, and keeps the interleaved view open. Run
 `:BetwixtVirtual` after saving to return to virtual display, or
 `:BetwixtVirtual!` to discard unsaved interleaved edits.
-The physical language-comment prefix remains visible so it is clear why the
-materialized review text is valid source. The header's author, status, and type
-are directly editable; the target range, anchor state, and frame boundary
-remain protected.
+For prefix-only syntax, the physical language-comment prefix remains visible
+on each line. For paired syntax such as Markdown's `<!-- %s -->`, the
+delimiters occupy separate protected lines around an aligned, prefix-free frame.
+The header's author, status, and type are directly editable; the target range,
+anchor state, and frame boundary remain protected.
 After a successful write, `<leader>re` toggles back to virtual display as well.
 Entering and leaving interleaved mode establishes a fresh undo history so an
 old undo entry cannot accidentally restore review text into a normal source
-write. This first cut only accepts line-comment `commentstring` values.
+write. Paired review text containing either delimiter is rejected.
 
 The same attachment works in a viewer pane when that pane contains the real
 working-file buffer, as CodeDiff and Diffview do for working-tree comparisons:

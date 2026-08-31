@@ -15,7 +15,8 @@ synthetic fixtures. The current end-to-end path can:
 
 1. attach an existing one-file plain-text sidecar to its real source buffer;
 2. display attributed range comments as highlighted virtual lines;
-3. materialize them as source-language comments for ordinary editing;
+3. materialize them as source-language comment sections for ordinary editing,
+   including prefix-free bodies inside paired Markdown comment boundaries;
 4. write simultaneous source and review edits to their separate files;
 5. create comments from a visual range or the cursor line;
 6. lazily create or discover an adjacent per-source sidecar on the first
@@ -88,6 +89,21 @@ the complete thread with a gray highlight, but adding a reply neither resolves
 nor reopens it. Nested replies, reply IDs, timestamps, reactions, per-reply
 status, and automatic transitions remain outside this experiment.
 
+## Current Paired-Comment Experiment
+
+Prefix-only `commentstring` values continue to prefix every projected review
+line. A paired value instead places its opening and closing tokens on separate
+protected lines around the aligned Betwixt frame, leaving the header, bodies,
+replies, and footer prefix-free. Markdown's `<!-- %s -->` is the first covered
+paired form.
+
+The write path rejects review text containing either delimiter before touching
+the source or sidecar. The current automated case covers ordinary Markdown
+prose, multiline bodies, replies, cancellation, and separated writes. Placement
+inside Markdown lists, block quotes, and fenced code blocks remains a live-trial
+question; notably, CommonMark treats an HTML comment inside a fence as literal
+code rather than a hidden comment.
+
 ## Open Questions
 
 - Does the adjacent `<source-file>.betwixt.md` default remain usable in real
@@ -100,5 +116,5 @@ status, and automatic transitions remain outside this experiment.
 - Is after-range display still the right default outside the synthetic cases?
 - Is temporary diff rematching during materialized editing acceptable in
   longer CodeDiff sessions?
-- Should paired block-comment materialization be added for Markdown, or should
-  it use a different editing projection?
+- Is boundary-only paired materialization unobtrusive enough in Markdown lists,
+  block quotes, fenced code blocks, and live previews?
