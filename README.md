@@ -93,6 +93,8 @@ whole thread a muted gray background.
 
 ## Workflow
 
+### Regular source buffer
+
 Open a saved source file and create the first comment directly:
 
 ```vim
@@ -134,6 +136,44 @@ Neovim's native write path, so normal `BufWritePre` formatting and
 interleaved view. The sidecar is written only after the native source write
 succeeds, so a rejected source write leaves the sidecar untouched and the
 pending buffer editable.
+
+### CodeDiff review
+
+For the tested single-file CodeDiff path:
+
+1. Open the saved working-tree file in its normal buffer.
+2. Create the first comment with `:BetwixtComment`, or reopen an existing
+   review with `:BetwixtAttach path/to/file.ext.betwixt.md`.
+3. Return to virtual mode and run `:CodeDiff file HEAD~1` to compare the
+   working file with the previous commit. Replace `HEAD~1` with the desired
+   revision.
+4. Use the ordinary Betwixt commands in CodeDiff's editable working-file pane.
+   `:w` writes the working file and sidecar; `:BetwixtVirtual` restores the
+   virtual thread display.
+
+In side-by-side mode, Betwixt adds an equal-height highlighted spacer on the
+opposite side when the anchor resolves uniquely in both versions. CodeDiff's
+`t` mapping can switch between side-by-side and inline layouts. Stale or
+ambiguous anchors do not receive a speculative opposite spacer.
+
+### Filetype support
+
+Materialized editing requires a prefix-only line-comment `commentstring`.
+Current automated coverage is:
+
+| Filetype | Neovim `commentstring` | Tested coverage |
+| --- | --- | --- |
+| Lua | `-- %s` | Full comment, reply, anchoring, write, CodeDiff, and Diffview flows |
+| JavaScript | `// %s` | Materialized comment editing and source/sidecar separation |
+| Python | `# %s` | Lazy first-comment creation and materialized editing |
+| Markdown | `<!-- %s -->` | Existing sidecar display only; the normal authoring flow is unsupported |
+
+Markdown uses a paired block comment rather than a line-comment prefix.
+Supporting it requires a separate block-comment materialization experiment;
+`:BetwixtComment`, `:BetwixtReply`, and `:BetwixtEdit` currently reject that
+filetype before changing either file. In other words, an already-authored
+Markdown sidecar can be attached and viewed, but comments cannot yet be created
+from a Markdown buffer with the usual Betwixt flow.
 
 Run `:help betwixt` for the command reference.
 

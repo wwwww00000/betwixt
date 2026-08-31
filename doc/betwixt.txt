@@ -7,6 +7,8 @@ CONTENTS                                                        *betwixt-content
 2. Setup ................................................. |betwixt-setup|
 3. Commands ............................................ |betwixt-commands|
 4. Sidecars ............................................ |betwixt-sidecars|
+5. Usage recipes .......................................... |betwixt-usage|
+6. Filetypes .......................................... |betwixt-filetypes|
 
 ===============================================================================
 INTRODUCTION                                                          *betwixt*
@@ -117,5 +119,46 @@ or context.
 Comments whose root status is not `resolved` use the amber comment highlight.
 A root status of `resolved` uses a muted gray highlight for the complete
 comment and its replies.
+
+===============================================================================
+USAGE RECIPES                                                *betwixt-usage*
+
+REGULAR BUFFER
+
+Open a saved source file. Run |:BetwixtComment| on the cursor line or a visual
+range; the first |:write| creates `<source-file>.betwixt.md`. Use
+|:BetwixtEdit| to materialize existing comments, |:BetwixtReply| to append a
+reply, and |:BetwixtVirtual| to return to virtual display. Reopen an existing
+review explicitly with:
+>
+    :BetwixtAttach path/to/file.ext.betwixt.md
+<
+
+CODEDIFF
+
+Open the saved working-tree file in its normal buffer and create or attach its
+Betwixt review. Return to virtual mode, then compare the current file with a
+revision:
+>
+    :CodeDiff file HEAD~1
+<
+Use the normal Betwixt commands in CodeDiff's editable working-file pane. In
+side-by-side mode a uniquely resolved anchor receives an equal-height spacer
+on the opposite side. Stale or ambiguous anchors do not receive a speculative
+spacer. CodeDiff's `t` mapping toggles side-by-side and inline layouts.
+
+===============================================================================
+FILETYPES                                                *betwixt-filetypes*
+
+Materialized editing requires a prefix-only line-comment `commentstring`.
+The automated suite covers Lua (`-- %s`) end to end, JavaScript (`// %s`) for
+materialized editing and separated writes, and Python (`# %s`) for lazy first
+comments and materialized editing.
+
+Neovim's Markdown `commentstring` is `<!-- %s -->`. This paired block-comment
+shape is not currently supported by |:BetwixtComment|, |:BetwixtReply|, or
+|:BetwixtEdit|. An existing Markdown sidecar may still be attached for virtual
+display because that mode does not insert comment syntax into the buffer. The
+usual create-and-edit flow is therefore unavailable in a Markdown buffer.
 
 vim:tw=78:ts=8:noet:ft=help:norl:

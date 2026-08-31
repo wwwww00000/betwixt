@@ -100,3 +100,5 @@ status, and automatic transitions remain outside this experiment.
 - Is after-range display still the right default outside the synthetic cases?
 - Is temporary diff rematching during materialized editing acceptable in
   longer CodeDiff sessions?
+- Should paired block-comment materialization be added for Markdown, or should
+  it use a different editing projection?
