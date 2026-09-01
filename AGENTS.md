@@ -8,8 +8,9 @@ boundary, current plugin slice, deferred work, and open questions.
 ## Project Boundary
 
 Betwixt owns a repository-co-located plain-text code-review sidecar, its first
-Neovim editing and display projection, and a bounded agent operation for adding
-comments. Reviewed repositories continue to own their source code.
+Neovim editing and display projection, and bounded agent operations for adding
+root comments and linear replies. Reviewed repositories continue to own their
+source code.
 
 When asked only to review or comment, do not modify the reviewed source. Keep
 comment authority, claims that a finding was addressed, and human acceptance as
@@ -31,6 +32,7 @@ separate actions.
 
 ## Project Skill
 
-Use `.agents/skills/betwixt-comment/SKILL.md` when asked to add a review comment
-through the current Betwixt sidecar convention. The skill does not authorize
-code changes or invent a reply model.
+Use `.agents/skills/betwixt-comment/SKILL.md` when asked to add a root review
+comment or linear reply through the current Betwixt sidecar convention. The
+skill does not authorize code changes, status transitions, or a nested reply
+model.

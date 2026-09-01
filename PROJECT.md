@@ -3,7 +3,8 @@
 Betwixt is a local-first code-review sidecar project. It keeps review artifacts
 as plain text co-located with the repository being reviewed, projects them into
 Neovim as line-adjacent sections that can be edited directly, and gives humans
-and agents the same bounded operation for adding comments.
+and agents the same bounded operations for adding root comments and linear
+replies.
 
 The name is a playful use of “between”: review text lives betwixt source lines
 in the editing projection while remaining distinct from source code on disk.
