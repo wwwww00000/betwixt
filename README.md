@@ -138,6 +138,26 @@ restores the interleaved view. The sidecar is written only after the native
 source write succeeds, so a rejected source write leaves the sidecar untouched
 and the pending buffer editable.
 
+### Human-agent handoff
+
+The sidecar, rather than the materialized source buffer, is the shared review
+conversation. Before handing a review to an external agent:
+
+1. Use `:w` to persist source and review edits separately.
+2. Run `:BetwixtVirtual` so Neovim is no longer holding an interleaved edit.
+3. Let the agent read the clean source and edit the `.betwixt.md` sidecar
+   directly. The included
+   [Betwixt comment skill](.agents/skills/betwixt-comment/SKILL.md) supports
+   appending either a root comment or a linear `### Reply`.
+4. Run `:BetwixtRefresh` to display the updated sidecar.
+
+There is no standalone agent-facing `reply` command or CLI yet. The Lua
+`require("betwixt").reply(buffer)` function backs the interactive
+`:BetwixtReply` flow and selects the nearest projected comment; it is not a
+filesystem mutation API. If an external edit arrives while the buffer remains
+interleaved, Betwixt rejects the next write rather than overwrite the changed
+sidecar.
+
 ### CodeDiff review
 
 For the tested single-file CodeDiff path:
@@ -193,21 +213,21 @@ Run `:help betwixt` for the command reference.
 
 This is an early plugin slice, tested with Neovim 0.12. The retained fixtures
 cover lazy first-comment creation, native write hooks and failure recovery, Lua,
-JavaScript, and Python comment syntax, ordinary attachment, simultaneous source
-and sidecar writes, linear reply creation and editing, resolved-thread
-highlighting, context-assisted anchoring under common source edits, CodeDiff
-alignment, and Diffview editing.
+JavaScript, Python, and Markdown comment syntax, ordinary attachment,
+simultaneous source and sidecar writes, linear reply creation and editing,
+resolved-thread highlighting, context-assisted anchoring under common source
+edits, CodeDiff alignment, and Diffview editing.
 
 Multi-file artifact organization, automatic anchor migration, nested reply
 trees, automatic resolution, and hosted collaboration remain deliberately
 outside the current slice.
 
-The current slice is suitable for a controlled local pilot. It expects saved
-normal file buffers and a filetype with a usable `commentstring`. Reopening
-an existing review still requires an explicit `:BetwixtAttach`; there is no
-automatic sidecar discovery on buffer open. CodeDiff is the better-tested live
-review path. Diffview works when Betwixt is attached to its editable working
-pane, but that attachment is also manual.
+Active feature development is paused while this slice receives a controlled
+local pilot. It expects saved normal file buffers and a filetype with a usable
+`commentstring`. Reopening an existing review still requires an explicit
+`:BetwixtAttach`; there is no automatic sidecar discovery on buffer open.
+CodeDiff is the better-tested live review path. Diffview works when Betwixt is
+attached to its editable working pane, but that attachment is also manual.
 
 ## Development
 

@@ -35,6 +35,15 @@ The plugin is still an early working slice, not a settled artifact protocol.
 The fixtures under `experiment/` retain comparison cases and known viewer
 limitations.
 
+## Current Phase
+
+Active feature development paused on 2026-09-06 while the existing slice moves
+into controlled use on other projects. The next work should come from observed
+review friction: record the failing interaction, add the smallest regression
+case that represents it, and change only what the trial justifies. The current
+sidecar organization, range placement, and lack of stable comment identities
+remain intentional experiments rather than unfinished infrastructure work.
+
 ## Accepted Boundaries
 
 - The sidecar is the durable review object; Neovim is its first frontend.
@@ -90,6 +99,21 @@ the complete thread with a gray highlight, but adding a reply neither resolves
 nor reopens it. Nested replies, reply IDs, timestamps, reactions, per-reply
 status, and automatic transitions remain outside this experiment.
 
+## Current Agent Handoff
+
+The plain-text sidecar is also the current agent interface. The repository
+ships `.agents/skills/betwixt-comment/SKILL.md`, which permits a bounded agent
+operation to append a root comment or linear reply without changing reviewed
+source or root status. There is no standalone CLI or filesystem-level reply
+API; agents edit the sidecar directly and identify a root from its visible
+file, range, anchor, and content.
+
+Before an external agent edits a review, the human should write the interleaved
+buffer and return it to virtual mode. After the sidecar edit, `:BetwixtRefresh`
+reloads the conversation. Betwixt deliberately rejects a later interleaved
+write if the sidecar changed externally, preventing a stale buffer from
+silently overwriting the agent's contribution.
+
 ## Current Paired-Comment Experiment
 
 Prefix-only `commentstring` values continue to prefix every projected review
@@ -119,3 +143,5 @@ code rather than a hidden comment.
   longer CodeDiff sessions?
 - Is boundary-only paired materialization unobtrusive enough in Markdown lists,
   block quotes, fenced code blocks, and live previews?
+- Does direct agent editing remain sufficient in real reviews, or does repeated
+  targeting or serialization friction justify a small reply command later?

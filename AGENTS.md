@@ -16,19 +16,26 @@ When asked only to review or comment, do not modify the reviewed source. Keep
 comment authority, claims that a finding was addressed, and human acceptance as
 separate actions.
 
-## First Experiment
+## Current Phase
 
-- Build the thinnest end-to-end path for one synthetic file, one range, and one
-  comment before generalizing.
+Active feature development is paused while the current plugin and sidecar are
+used in real reviews. Prefer recording concrete trial friction and fixing
+demonstrated failures over expanding the artifact or interaction model.
+
+## Slice Guardrails
+
+- Preserve the thinnest working end-to-end path and add only the smallest
+  representative case for any failure observed during the pilot.
 - Keep the sidecar readable and editable as ordinary text without Neovim or an
   agent harness.
 - Prefer directly editable highlighted line sections over popup comment cards.
 - Treat displayed lines as projection positions rather than automatically as
   durable note identities.
 - Keep storage organization, range placement, and stale-anchor behavior
-  experimental until the first loop provides evidence.
-- Do not add threading, replies, a database, hosted collaboration, automatic
-  synthesis, or source write-back during the first experiment.
+  experimental until the live trial provides evidence.
+- Keep replies linear. Do not add nested threads, stable reply identities, a
+  database, hosted collaboration, automatic synthesis, or source write-back
+  without evidence from the live trial.
 
 ## Project Skill
 

@@ -73,7 +73,7 @@ The following commands are local to an attached source buffer:
 
                                                      *:BetwixtEdit*
 :BetwixtEdit
-        Materialize review sections as syntactic comment lines.
+        Materialize review sections using the filetype's comment syntax.
 
                                                    *:BetwixtToggle*
 :BetwixtToggle
@@ -133,6 +133,19 @@ review explicitly with:
 >
     :BetwixtAttach path/to/file.ext.betwixt.md
 <
+
+AGENT HANDOFF
+
+The sidecar is the shared human-agent conversation; materialized review lines
+are only a temporary Neovim editing projection. Before an external agent edits
+the sidecar, use |:write| and |:BetwixtVirtual|. The agent appends a root
+comment or linear `### Reply` directly to the plain-text sidecar. There is no
+standalone agent-facing reply command or CLI. After the external edit, use
+|:BetwixtRefresh|.
+
+Do not leave pending interleaved edits across this handoff. If the sidecar
+changes externally while the buffer remains interleaved, Betwixt rejects the
+next write rather than overwrite the external contribution.
 
 CODEDIFF
 
