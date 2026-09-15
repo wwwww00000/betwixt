@@ -7,7 +7,12 @@ betwixt.setup({ author = "reviewer" })
 vim.cmd("filetype plugin on")
 
 local source_path = vim.fs.joinpath(temporary, "notes.md")
-local sidecar_path = source_path .. ".betwixt.md"
+vim.cmd.cd(vim.fn.fnameescape(temporary))
+-- Exercise the non-Git cwd fallback even when the test host tracks /tmp.
+vim.fs.root = function()
+  return nil
+end
+local sidecar_path = vim.fs.joinpath(temporary, ".betwixt", "notes.md.betwixt.md")
 local source = {
   "# Notes",
   "",
@@ -39,7 +44,7 @@ local function sidecar_text()
 end
 
 vim.cmd("3BetwixtComment question")
-local header = find_line("╭─ betwixt · reviewer · open · question · notes.md:3-3")
+local header = find_line("╭─ betwixt · reviewer · open · question · ../notes.md:3-3")
 assert(buffer_lines()[header - 1] == "<!--", "the opening delimiter should have its own protected line")
 assert(buffer_lines()[header + 1] == "", "a paired comment should leave its empty body prefix-free")
 assert(buffer_lines()[header + 2] == "╰─ betwixt", "paired syntax should not offset the frame footer")
@@ -74,7 +79,7 @@ assert(written:find("author: reviewer\nbody:\nAgreed; I would shorten it%."), "t
 betwixt.virtualize(source_buffer, false)
 vim.api.nvim_win_set_cursor(0, { 5, 0 })
 vim.cmd("BetwixtComment")
-local second_header = find_line("╭─ betwixt · reviewer · open · comment · notes.md:5-5")
+local second_header = find_line("╭─ betwixt · reviewer · open · comment · ../notes.md:5-5")
 assert(buffer_lines()[second_header - 1] == "<!--", "a later thread should retain its opening boundary")
 assert(buffer_lines()[second_header + 3] == "-->", "a later thread should retain its closing boundary")
 vim.api.nvim_buf_set_lines(source_buffer, second_header, second_header + 1, false, { "Should this item be expanded?" })
@@ -104,6 +109,15 @@ assert(vim.bo[source_buffer].modified, "the rejected review edit should remain e
 
 betwixt.virtualize(source_buffer, true)
 assert(vim.deep_equal(buffer_lines(), source), "discarding the rejected edit should restore pure Markdown")
+betwixt.interleave(source_buffer)
+local opening = find_line("<!--")
+local closing = find_line("-->")
+vim.api.nvim_buf_set_lines(source_buffer, opening - 1, closing, false, {})
+vim.cmd("write")
+assert(vim.deep_equal(vim.fn.readfile(source_path), source), "deleting a paired block must preserve source")
+local remaining = table.concat(vim.fn.readfile(sidecar_path), "\n")
+local _, count = remaining:gsub("## Comment", "")
+assert(count == 1, "deleting the complete paired block must delete its thread")
 betwixt.detach(source_buffer, false)
 vim.fn.delete(temporary, "rf")
 print("betwixt Markdown paired comments: ok")

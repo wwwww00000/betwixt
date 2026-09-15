@@ -22,7 +22,7 @@ end, {
   bang = true,
   complete = "file",
   desc = "Project Betwixt comments onto the current source buffer",
-  nargs = 1,
+  nargs = "?",
 })
 
 vim.api.nvim_create_user_command("BetwixtComment", function(command)
@@ -38,3 +38,9 @@ vim.api.nvim_create_user_command("BetwixtReply", function()
 end, {
   desc = "Reply to the nearest attached Betwixt comment",
 })
+
+for _, name in ipairs({ "BetwixtRefresh", "BetwixtReload" }) do
+  vim.api.nvim_create_user_command(name, function(command)
+    require("betwixt").refresh(nil, command.bang)
+  end, { bang = true, desc = "Reload the review, discovering the default sidecar when present" })
+end

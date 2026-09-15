@@ -15,7 +15,9 @@ reviewed code while preserving a strict comment-versus-change boundary.
   follow the repository's current convention rather than inventing a competing
   layout.
 - If none exists and one source file is unambiguous, use Betwixt's current
-  adjacent `<source-file>.betwixt.md` default. Ask before choosing when the
+  `.betwixt/<source-relative-path>.betwixt.md` default at the nearest Git
+  worktree root (beside `.git`), or under `cwd` outside Git. Keep `file:`
+  relative to the sidecar directory. Ask before choosing when the
   target file or artifact location is ambiguous.
 - Read the current source and sidecar before writing. Do not modify the reviewed
   source as part of this operation.

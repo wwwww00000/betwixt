@@ -8,7 +8,12 @@ betwixt.setup({ author = "reviewer" })
 vim.cmd("filetype plugin on")
 
 local source_path = vim.fs.joinpath(temporary, "sample.py")
-local sidecar_path = source_path .. ".betwixt.md"
+vim.cmd.cd(vim.fn.fnameescape(temporary))
+-- Exercise the non-Git cwd fallback even when the test host tracks /tmp.
+vim.fs.root = function()
+  return nil
+end
+local sidecar_path = vim.fs.joinpath(temporary, ".betwixt", "sample.py.betwixt.md")
 local source = {
   "def total(value):",
   "    subtotal = value",
@@ -42,7 +47,7 @@ assert(vim.uv.fs_stat(sidecar_path) == nil, "opening a source file must not crea
 vim.cmd("2,3BetwixtComment risk")
 assert(vim.uv.fs_stat(sidecar_path) == nil, "the first sidecar should remain pending until :write")
 assert(
-  find_line("# ╭─ betwixt · reviewer · open · risk · sample.py:2-3") > 0,
+  find_line("# ╭─ betwixt · reviewer · open · risk · ../sample.py:2-3") > 0,
   "the first command should attach and materialize"
 )
 betwixt.virtualize(source_buffer, true)
@@ -57,7 +62,10 @@ vim.cmd("write")
 assert(vim.uv.fs_stat(sidecar_path) ~= nil, "writing the first comment should create the default sidecar")
 assert(vim.deep_equal(vim.fn.readfile(source_path), source), "lazy sidecar creation must not alter source")
 local written = sidecar_text()
-assert(written:find("file: sample%.py") ~= nil, "the default sidecar should target its adjacent source")
+assert(
+  written:find("file: ../sample%.py") ~= nil,
+  "the default sidecar should target its source relative to the sidecar directory"
+)
 assert(written:find("range: 2%-3") ~= nil, "the first selected range should persist")
 assert(
   written:find(

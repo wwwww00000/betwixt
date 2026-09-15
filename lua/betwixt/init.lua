@@ -212,9 +212,6 @@ local function parse_sidecar(lines, path)
   if not review.file then
     fail("missing file field in %s", path)
   end
-  if #review.comments == 0 then
-    fail("no comments found in %s", path)
-  end
 
   return review
 end
@@ -798,7 +795,7 @@ local function mark_interleaved_blocks(attachment, blocks)
     block.mark = vim.api.nvim_buf_set_extmark(buffer, interleaved_namespace, block.start_row, 0, {
       end_row = block.end_row,
       end_col = 0,
-      end_right_gravity = true,
+      end_right_gravity = false,
       hl_eol = true,
       hl_group = block.highlight_group,
       priority = 200,
@@ -872,11 +869,13 @@ local function interleaved_regions(attachment)
     if #position == 0 or position[3].end_row == nil then
       fail("an interleaved comment boundary was deleted; undo the edit or leave with :BetwixtVirtual!")
     end
-    table.insert(regions, {
-      block = block,
-      start_row = position[1],
-      end_row = position[3].end_row,
-    })
+    if position[1] ~= position[3].end_row then
+      table.insert(regions, {
+        block = block,
+        start_row = position[1],
+        end_row = position[3].end_row,
+      })
+    end
   end
   table.sort(regions, function(left, right)
     return left.start_row < right.start_row
@@ -889,6 +888,7 @@ local function collect_interleaved(attachment)
   local regions = interleaved_regions(attachment)
   local review = vim.deepcopy(attachment.review)
   local source = {}
+  local retained = {}
   local cursor = 1
 
   for _, region in ipairs(regions) do
@@ -927,6 +927,7 @@ local function collect_interleaved(attachment)
       table.insert(content, decode_comment_line(codec, lines[index]))
     end
     collect_thread(comment, content)
+    retained[region.block.comment_index] = true
     cursor = region.end_row + 1
   end
 
@@ -934,6 +935,13 @@ local function collect_interleaved(attachment)
     table.insert(source, lines[index])
   end
 
+  local comments = {}
+  for index, comment in ipairs(review.comments) do
+    if retained[index] then
+      table.insert(comments, comment)
+    end
+  end
+  review.comments = comments
   return source, review
 end
 
@@ -981,6 +989,11 @@ local function write_interleaved(attachment, event)
   local sidecar_lines = serialize_sidecar(review)
   local sidecar_changed = not vim.deep_equal(sidecar_lines, attachment.sidecar_lines)
 
+  for _, block in ipairs(state.blocks) do
+    local mark = vim.api.nvim_buf_get_extmark_by_id(buffer, interleaved_namespace, block.mark, { details = true })
+    block.start_row = mark[1]
+    block.end_row = mark[3].end_row
+  end
   local original_lines = source_buffer_lines(buffer)
   local original_modified = vim.bo[buffer].modified
   local undo_sequence = vim.api.nvim_buf_call(buffer, function()
@@ -1011,7 +1024,16 @@ local function write_interleaved(attachment, event)
   end
 
   state.source_lines = written_source
-  if sidecar_changed and vim.fn.writefile(sidecar_lines, attachment.sidecar_path) ~= 0 then
+  local sidecar_ok = true
+  if sidecar_changed then
+    sidecar_ok = pcall(function()
+      vim.fn.mkdir(vim.fs.dirname(attachment.sidecar_path), "p")
+      if vim.fn.writefile(sidecar_lines, attachment.sidecar_path) ~= 0 then
+        error("sidecar write failed")
+      end
+    end)
+  end
+  if not sidecar_ok then
     mark_interleaved_blocks(attachment, state.blocks)
     vim.bo[buffer].modified = true
     fail("wrote source but could not write %s; the review edit remains pending", attachment.sidecar_path)
@@ -1319,18 +1341,19 @@ local function refresh_attachment(attachment, reload_sidecar)
   render_virtual_comments(attachment)
 end
 
-function M.interleave(source_buffer, target_comment_index, target_reply_index)
+function M.interleave(source_buffer, target_comment_index, target_reply_index, edited_source)
   source_buffer = source_buffer or vim.api.nvim_get_current_buf()
   local attachment = attachments[source_buffer]
   if not attachment then
     fail("current buffer has no Betwixt attachment")
   end
-  if attachment.interleaved then
+  local existing_state = attachment.interleaved
+  if existing_state and not edited_source then
     return source_buffer
   end
 
   local source_was_modified = vim.bo[source_buffer].modified
-  local source = source_buffer_lines(source_buffer)
+  local source = edited_source or source_buffer_lines(source_buffer)
   local disk_source = read_lines(attachment.source_path)
   if not source_was_modified and not vim.deep_equal(source, disk_source) then
     fail("buffer differs from the source on disk; reload it before entering interleaved mode")
@@ -1347,20 +1370,23 @@ function M.interleave(source_buffer, target_comment_index, target_reply_index)
     item, source_win = nearest_virtual_comment(attachment)
     target_comment_index = item.comment_index
   end
-  local state = {
-    codec = materialization_codec(source_buffer),
-    source_lines = disk_source,
-  }
+  local state = existing_state
+    or {
+      codec = materialization_codec(source_buffer),
+      source_lines = disk_source,
+    }
   attachment.interleaved = state
-  local rendered, render_error = pcall(render_interleaved, attachment, source)
+  local rendered, render_error = pcall(render_interleaved, attachment, source, existing_state ~= nil)
   if not rendered then
-    attachment.interleaved = nil
+    attachment.interleaved = existing_state
     error(render_error, 0)
   end
   if source_was_modified then
     vim.bo[source_buffer].modified = true
   end
-  install_interleaved_write(attachment)
+  if not existing_state then
+    install_interleaved_write(attachment)
+  end
 
   for _, block in ipairs(state.blocks) do
     if block.comment_index == target_comment_index then
@@ -1385,8 +1411,44 @@ function M.interleave(source_buffer, target_comment_index, target_reply_index)
   return source_buffer
 end
 
+local function relative_path(directory, path)
+  local left = vim.split(absolute(directory), "/", { trimempty = true })
+  local right = vim.split(absolute(path), "/", { trimempty = true })
+  local common = 0
+  while left[common + 1] and left[common + 1] == right[common + 1] do
+    common = common + 1
+  end
+  local parts = {}
+  for _ = common + 1, #left do
+    table.insert(parts, "..")
+  end
+  vim.list_extend(parts, vim.list_slice(right, common + 1))
+  return table.concat(parts, "/")
+end
+
 local function default_sidecar_path(source_path)
-  return source_path .. ".betwixt.md"
+  local root = vim.fs.root(vim.fs.dirname(source_path), ".git") or vim.fn.getcwd()
+  local relative = relative_path(root, source_path)
+  if relative:match("^%.%./") then
+    relative = "_external/" .. source_path:gsub("^/", "")
+  end
+  return vim.fs.joinpath(root, ".betwixt", relative .. ".betwixt.md")
+end
+
+function M.refresh(source_buffer, force)
+  source_buffer = source_buffer or vim.api.nvim_get_current_buf()
+  local attachment = attachments[source_buffer]
+  if not attachment then
+    local path = default_sidecar_path(absolute(vim.api.nvim_buf_get_name(source_buffer)))
+    if path_exists(path) then
+      return M.attach(path, { buffer = source_buffer })
+    end
+    return
+  end
+  if attachment.interleaved then
+    stop_interleaved(attachment, force)
+  end
+  refresh_attachment(attachment, true)
 end
 
 function M.comment_or_create(source_buffer, first, last, comment_type)
@@ -1410,7 +1472,7 @@ function M.comment_or_create(source_buffer, first, last, comment_type)
       buffer = source_buffer,
       initial_review = {
         comments = {},
-        file = vim.fs.basename(source_path),
+        file = relative_path(vim.fs.dirname(sidecar_path), source_path),
       },
     })
   else
@@ -1433,12 +1495,31 @@ function M.comment(source_buffer, first, last, comment_type)
   if not attachment then
     fail("current buffer has no Betwixt attachment")
   end
-  if attachment.interleaved then
-    fail("finish the current interleaved edit before adding another comment")
-  end
 
   local source_was_modified = vim.bo[source_buffer].modified
   local source = source_buffer_lines(source_buffer)
+  local collected_review
+  if attachment.interleaved then
+    local regions = interleaved_regions(attachment)
+    local function source_row(row)
+      row = tonumber(row)
+      if not row then
+        fail("comment range is missing")
+      end
+      local offset = 0
+      for _, region in ipairs(regions) do
+        if row > region.start_row and row <= region.end_row then
+          fail("select source lines, not an existing comment block")
+        end
+        if region.end_row < row then
+          offset = offset + region.end_row - region.start_row
+        end
+      end
+      return row - offset
+    end
+    first, last = source_row(first), source_row(last)
+    source, collected_review = collect_interleaved(attachment)
+  end
   local disk_source = read_lines(attachment.source_path)
   if not source_was_modified and not vim.deep_equal(source, disk_source) then
     fail("buffer differs from the source on disk; reload it before adding a comment")
@@ -1459,8 +1540,9 @@ function M.comment(source_buffer, first, last, comment_type)
     comment_type = "comment"
   end
   comment_type = metadata_value("type", comment_type)
+  local previous_state = attachment.interleaved
   local previous_review = attachment.review
-  local review = vim.deepcopy(previous_review)
+  local review = collected_review or vim.deepcopy(previous_review)
   table.insert(review.comments, {
     anchor = vim.list_slice(source, first, last),
     author = author,
@@ -1476,9 +1558,13 @@ function M.comment(source_buffer, first, last, comment_type)
   attachment.review = review
 
   local comment_index = #review.comments
-  local ok, result = pcall(M.interleave, source_buffer, comment_index)
+  local ok, result = pcall(M.interleave, source_buffer, comment_index, nil, source)
   if not ok then
     attachment.review = previous_review
+    if previous_state then
+      attachment.interleaved = previous_state
+      error(result, 0)
+    end
     if attachment.interleaved then
       vim.api.nvim_buf_clear_namespace(source_buffer, interleaved_namespace, 0, -1)
       replace_buffer_lines(source_buffer, source)
@@ -1489,7 +1575,7 @@ function M.comment(source_buffer, first, last, comment_type)
     error(result, 0)
   end
 
-  attachment.interleaved.pending_review = previous_review
+  attachment.interleaved.pending_review = attachment.interleaved.pending_review or previous_review
   vim.bo[source_buffer].modified = true
   vim.schedule(function()
     if
@@ -1613,6 +1699,12 @@ function M.attach(sidecar_path, options)
     fail("source buffer is invalid")
   end
 
+  if sidecar_path == nil or sidecar_path == "" then
+    if vim.api.nvim_buf_get_name(source_buffer) == "" then
+      fail("attach requires a saved source file")
+    end
+    sidecar_path = default_sidecar_path(absolute(vim.api.nvim_buf_get_name(source_buffer)))
+  end
   sidecar_path = absolute(sidecar_path)
   local sidecar_lines
   local review
@@ -1671,9 +1763,9 @@ function M.attach(sidecar_path, options)
   vim.api.nvim_buf_create_user_command(source_buffer, "BetwixtVirtual", function(command)
     M.virtualize(source_buffer, command.bang)
   end, { bang = true, desc = "Return interleaved Betwixt comments to virtual display" })
-  vim.api.nvim_buf_create_user_command(source_buffer, "BetwixtRefresh", function()
-    refresh_attachment(attachment, true)
-  end, { desc = "Reload and project the Betwixt sidecar" })
+  vim.api.nvim_buf_create_user_command(source_buffer, "BetwixtRefresh", function(command)
+    M.refresh(source_buffer, command.bang)
+  end, { bang = true, desc = "Reload and project the Betwixt sidecar" })
   vim.api.nvim_buf_create_user_command(source_buffer, "BetwixtDetach", function()
     M.detach(source_buffer, false)
   end, { desc = "Remove the Betwixt projection" })

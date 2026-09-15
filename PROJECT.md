@@ -20,7 +20,7 @@ synthetic fixtures. The current end-to-end path can:
    including prefix-free bodies inside paired Markdown comment boundaries;
 4. write simultaneous source and review edits to their separate files;
 5. create comments from a visual range or the cursor line;
-6. lazily create or discover an adjacent per-source sidecar on the first
+6. lazily create or discover an per-source sidecar under `.betwixt/` on the first
    `:BetwixtComment`;
 7. run materialized source writes through Neovim's native write hooks while
    keeping review lines out of the source file;
@@ -34,6 +34,16 @@ synthetic fixtures. The current end-to-end path can:
 The plugin is still an early working slice, not a settled artifact protocol.
 The fixtures under `experiment/` retain comparison cases and known viewer
 limitations.
+
+## Live-Trial Workflow Changes
+
+The first trial exposed friction in repeated comment creation, sidecar clutter,
+thread deletion, and reopening reviews. Materialized editing now supports adding
+further comments and deleting whole thread blocks on write. Default sidecars
+mirror source paths under `.betwixt/` beside the worktree’s `.git`, falling back
+to `cwd` outside Git. Attach accepts an omitted path, and reload/refresh discover
+an existing default sidecar. Explicit legacy sidecars remain supported; they are
+not migrated automatically. The `file:` field remains relative to the sidecar.
 
 ## Current Phase
 
@@ -131,8 +141,7 @@ code rather than a hidden comment.
 
 ## Open Questions
 
-- Does the adjacent `<source-file>.betwixt.md` default remain usable in real
-  reviews without prematurely settling repository-wide organization?
+- Does mirroring source paths under `.betwixt/` remain usable in real reviews?
 - Should a later bounded experiment help recover anchors when the targeted
   lines themselves change, or is an explicit stale state safer?
 - Do `status` and `type` earn their place through actual review use?

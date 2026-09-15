@@ -1,7 +1,7 @@
 # Betwixt
 
 Betwixt is an early local-first Neovim code-review plugin. Review comments live
-in a plain-text sidecar beside the reviewed source, appear as highlighted
+in a plain-text sidecar under the project’s `.betwixt/` directory, appear as highlighted
 line-adjacent sections, and can temporarily become syntactic comment sections
 for direct editing.
 
@@ -17,7 +17,7 @@ Load the current main branch with lazy.nvim:
 {
   "wwwww00000/betwixt",
   main = "betwixt",
-  cmd = { "BetwixtAttach", "BetwixtComment", "BetwixtOpen", "BetwixtReply" },
+  cmd = { "BetwixtAttach", "BetwixtComment", "BetwixtOpen", "BetwixtReply", "BetwixtReload", "BetwixtRefresh" },
   opts = {
     author = "reviewer",
   },
@@ -101,13 +101,23 @@ Open a saved source file and create the first comment directly:
 :[range]BetwixtComment [type]
 ```
 
-When no review is attached, the command lazily targets an adjacent
-`<source-file>.betwixt.md` sidecar. Nothing is created merely by opening or
-editing the source. The sidecar is created by the first `:w`; discarding the
+When no review is attached, the command lazily targets
+`.betwixt/<source-relative-path>.betwixt.md` at the nearest Git worktree root
+(beside `.git`, including worktrees), or under `cwd` outside Git. For example,
+`src/app.lua` uses `.betwixt/src/app.lua.betwixt.md`. Outside Git, files outside
+`cwd` use `.betwixt/_external/<absolute-source-path>.betwixt.md`.
+The sidecar’s `file:` field stays relative to its own directory. Nothing is
+created merely by opening or editing the source. The sidecar is created by the first `:w`; discarding the
 pending comment with `:BetwixtVirtual!` leaves no file behind. A later
 `:BetwixtComment` discovers and reuses the same default sidecar.
 
-To use an existing sidecar at another path, attach it explicitly:
+Use `:BetwixtAttach` without arguments to discover the default sidecar.
+`:BetwixtReload` and `:BetwixtRefresh` also attach it if present, and otherwise
+leave an unattached buffer alone. Reloading an attached review returns to virtual
+mode; unsaved interleaved edits require `:w` or an explicit `!` to discard them.
+
+Existing adjacent sidecars are not moved automatically. To use a sidecar at
+another path, attach it explicitly:
 
 ```vim
 :BetwixtAttach path/to/review.betwixt.md
@@ -122,6 +132,13 @@ Comments initially appear as virtual highlighted lines. Then:
 - Use `:BetwixtComment risk` to specify a type explicitly.
 - Place the cursor in or near a comment's range and use `:BetwixtReply` to
   append a reply and begin editing its body.
+- Add further comments in editing mode using the same cursor or visual-range
+  commands. Range endpoints must be source lines; intervening review blocks
+  are excluded from the anchor. Pending source and comment edits are retained.
+- Delete a complete comment block in editing mode, including its header,
+  footer, replies, and paired delimiters when present, then `:w` to delete that
+  thread from the sidecar. Partial boundary deletion is rejected. Deleting the
+  final thread leaves an empty review file.
 - Use `:w` to write the source and sidecar together.
 - Use `:BetwixtVirtual` to return to virtual display.
 - Use `:BetwixtVirtual!` to discard unsaved materialized changes.
@@ -164,7 +181,7 @@ For the tested single-file CodeDiff path:
 
 1. Open the saved working-tree file in its normal buffer.
 2. Create the first comment with `:BetwixtComment`, or reopen an existing
-   review with `:BetwixtAttach path/to/file.ext.betwixt.md`.
+   review with `:BetwixtAttach`.
 3. Return to virtual mode and run `:CodeDiff file HEAD~1` to compare the
    working file with the previous commit. Replace `HEAD~1` with the desired
    revision.
@@ -224,8 +241,8 @@ outside the current slice.
 
 Active feature development is paused while this slice receives a controlled
 local pilot. It expects saved normal file buffers and a filetype with a usable
-`commentstring`. Reopening an existing review still requires an explicit
-`:BetwixtAttach`; there is no automatic sidecar discovery on buffer open.
+`commentstring`. Reopen an existing review with `:BetwixtAttach` or `:BetwixtReload`;
+there is no automatic sidecar discovery on buffer open.
 CodeDiff is the better-tested live review path. Diffview works when Betwixt is
 attached to its editable working pane, but that attachment is also manual.
 

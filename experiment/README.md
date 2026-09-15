@@ -111,7 +111,7 @@ Visually select the smallest useful source range and run:
 ```
 
 When no sidecar is attached, the command lazily uses
-`<source-file>.betwixt.md`; the file is not created until `:w`. Once attached,
+`.betwixt/<source-relative-path>.betwixt.md`; the file is not created until `:w`. Once attached,
 the `<leader>rc` mapping provides the same command for a visual range or the
 cursor line. Both paths materialize the comments as syntactic source-language
 comments, place the cursor in a new blank body, and enter insert mode. The
