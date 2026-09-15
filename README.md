@@ -1,9 +1,9 @@
 # Betwixt
 
 Betwixt is an early local-first Neovim code-review plugin. Review comments live
-in a plain-text sidecar under the project’s `.betwixt/` directory, appear as highlighted
-line-adjacent sections, and can temporarily become syntactic comment sections
-for direct editing.
+in a plain-text sidecar under the project’s `.betwixt/` directory, appear as
+highlighted line-adjacent sections, and can temporarily become syntactic
+comment sections for direct editing.
 
 The source buffer remains the real working-file buffer. In materialized mode,
 one `:w` separates and writes source edits to the source file and review edits
@@ -17,14 +17,26 @@ Load the current main branch with lazy.nvim:
 {
   "wwwww00000/betwixt",
   main = "betwixt",
-  cmd = { "BetwixtAttach", "BetwixtComment", "BetwixtOpen", "BetwixtReply", "BetwixtReload", "BetwixtRefresh" },
+  cmd = {
+    "BetwixtAttach", "BetwixtComment", "BetwixtOpen",
+    "BetwixtReply", "BetwixtReload", "BetwixtRefresh",
+  },
+  keys = {
+    { "<leader>rc", "<cmd>BetwixtComment<cr>", desc = "Comment on current line" },
+    { "<leader>rc", ":BetwixtComment<cr>", mode = "x", desc = "Comment on selection" },
+    { "<leader>rr", "<cmd>BetwixtReload<cr>", desc = "Reload or attach review" },
+  },
   opts = {
     author = "reviewer",
   },
 }
 ```
 
-The complete setup surface is:
+The `keys` entries load the plugin on first use, so commenting and reopening a
+review work before attachment. The Visual mapping uses `:` to retain the
+selected range.
+
+The complete plugin setup surface is:
 
 ```lua
 require("betwixt").setup({
@@ -38,18 +50,36 @@ require("betwixt").setup({
 
 Set either mapping to `false` to disable it. Betwixt has no required plugin
 dependencies. Its CodeDiff alignment support activates only when CodeDiff is
-already present. The mappings are installed only after a sidecar is attached;
-the first review can begin with `:BetwixtComment`.
+already present. The plugin's own mappings are installed after attachment;
+the lazy.nvim `keys` entries above make comment creation available beforehand
+and add a global reload binding. If you change or disable `<leader>rc`, update
+both `keys` entries and `mappings.comment` to match.
+
+### Recommended bindings
+
+| Binding | Mode | Action |
+| --- | --- | --- |
+| `<leader>rc` | Normal / Visual | Add a comment on the cursor line / selected source range, in either display mode |
+| `<leader>re` | Normal, after attachment | Toggle virtual display and interleaved editing; write pending edits first |
+| `<leader>rr` | Normal | Reload the sidecar, attaching the default review if present |
+| `:w` | Command | Save source edits, comment edits, and deleted threads |
+
+`<leader>rc` and `<leader>rr` work before attachment with the lazy.nvim example
+above. With another loader, call `setup` and add the equivalent global mappings
+shown in [`:help betwixt-setup`](doc/betwixt.txt). Reload is deliberately mapped
+without `!`; use `:BetwixtReload!` explicitly to discard unsaved interleaved
+changes. `:BetwixtReply` still starts from virtual mode: write your edits and
+press `<leader>re` first.
 
 ## Sidecar
 
-An existing sidecar currently targets one source file relative to its own
-directory:
+Each sidecar targets one source file relative to its own directory. For
+`sample.lua` at the project root, `.betwixt/sample.lua.betwixt.md` contains:
 
 ```markdown
 # Betwixt review
 
-file: sample.lua
+file: ../sample.lua
 
 ## Comment
 
@@ -107,8 +137,9 @@ When no review is attached, the command lazily targets
 `src/app.lua` uses `.betwixt/src/app.lua.betwixt.md`. Outside Git, files outside
 `cwd` use `.betwixt/_external/<absolute-source-path>.betwixt.md`.
 The sidecar’s `file:` field stays relative to its own directory. Nothing is
-created merely by opening or editing the source. The sidecar is created by the first `:w`; discarding the
-pending comment with `:BetwixtVirtual!` leaves no file behind. A later
+created merely by opening or editing the source. The sidecar is created by the
+first `:w`; discarding the pending comment with `:BetwixtVirtual!` leaves no
+file behind. A later
 `:BetwixtComment` discovers and reuses the same default sidecar.
 
 Use `:BetwixtAttach` without arguments to discover the default sidecar.
@@ -154,6 +185,19 @@ formatting and `BufWritePost` hooks run without seeing review lines. It then
 restores the interleaved view. The sidecar is written only after the native
 source write succeeds, so a rejected source write leaves the sidecar untouched
 and the pending buffer editable.
+
+### Deleting a comment
+
+1. Press `<leader>re` to enter interleaved editing if needed.
+2. Place the cursor on the thread header, press `V`, select through its footer,
+   and press `d`. For paired syntax such as Markdown, select from `<!--` through
+   `-->`, including both delimiter lines and any replies.
+3. Run `:w` to remove the thread from the sidecar and save any source edits.
+
+Clearing only the body leaves an empty comment. Deleting just a boundary is
+rejected on write. Before writing, `:BetwixtVirtual!` cancels the deletion along
+with all other unsaved interleaved edits. Deleting the last thread leaves an
+empty sidecar that can be attached again.
 
 ### Human-agent handoff
 
@@ -210,7 +254,7 @@ In Markdown, a materialized thread looks like this:
 
 ```markdown
 <!--
-╭─ betwixt · reviewer · open · comment · notes.md:3-3
+╭─ betwixt · reviewer · open · comment · ../notes.md:3-3
 Could this be more direct?
 ╰─ betwixt
 -->

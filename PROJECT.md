@@ -20,7 +20,7 @@ synthetic fixtures. The current end-to-end path can:
    including prefix-free bodies inside paired Markdown comment boundaries;
 4. write simultaneous source and review edits to their separate files;
 5. create comments from a visual range or the cursor line;
-6. lazily create or discover an per-source sidecar under `.betwixt/` on the first
+6. lazily create or discover a per-source sidecar under `.betwixt/` on the first
    `:BetwixtComment`;
 7. run materialized source writes through Neovim's native write hooks while
    keeping review lines out of the source file;

@@ -39,7 +39,27 @@ SETUP                                                          *betwixt-setup*
 `mappings.comment` creates a comment on the current line in Normal mode or the
 selected lines in Visual mode after a sidecar is attached. `mappings.edit`
 toggles virtual and materialized display. Set either value to `false` to
-disable that mapping. Use |:BetwixtComment| to start the first review.
+disable that mapping. Both comment mappings also work in interleaved mode.
+
+For bindings that work before attachment, add these after setup (with Betwixt
+loaded). If using lazy.nvim, use the README's `keys` entries to load on demand:
+>lua
+    vim.keymap.set("n", "<leader>rc", "<cmd>BetwixtComment<cr>",
+      { desc = "Comment on current line" })
+    vim.keymap.set("x", "<leader>rc", ":BetwixtComment<cr>",
+      { desc = "Comment on selection" })
+    vim.keymap.set("n", "<leader>rr", "<cmd>BetwixtReload<cr>",
+      { desc = "Reload or attach review" })
+<
+The Visual mapping uses `:` so the selected range reaches the command.
+Keep the global comment mappings and `mappings.comment` consistent if changing
+or disabling the key. `<leader>re` remains the buffer-local edit toggle after
+attachment. `<leader>rr` discovers an existing default sidecar or reloads the
+attached review. It does not discard pending edits; write first, or explicitly
+use |:BetwixtReload| with [!] to discard unsaved interleaved changes.
+
+Use normal Visual-line deletion (V, select the whole block, d) and |:write| to
+remove a thread. There is no separate delete binding.
 
 ===============================================================================
 COMMANDS                                                    *betwixt-commands*
@@ -70,7 +90,8 @@ COMMANDS                                                    *betwixt-commands*
 :BetwixtReply
         Append an attributed reply to the nearest projected comment and
         materialize its empty body for immediate editing. Replies inherit the
-        root comment's anchor and status.
+        root comment's anchor and status. Start from virtual mode: write any
+        pending edits and use |:BetwixtVirtual| before replying.
 
                                                   *:BetwixtRefresh*
                                                    *:BetwixtReload*
@@ -116,12 +137,17 @@ not change the root status.
 Default sidecars mirror source paths under `.betwixt/` beside the nearest
 worktree’s `.git` (directory or file), or under cwd outside Git. Sources outside
 cwd and outside Git use `.betwixt/_external/<absolute-source-path>.betwixt.md`.
+For example, `src/app.lua` uses `.betwixt/src/app.lua.betwixt.md` with
+`file: ../../src/app.lua`. A root-level `sample.lua` uses
+`.betwixt/sample.lua.betwixt.md` with `file: ../sample.lua`.
 The `file:` field is relative to the sidecar's directory. Existing adjacent
 sidecars remain usable by explicit path; they are not automatically migrated.
 
 To delete a thread, delete its complete materialized block, including header,
 footer, replies, and paired delimiters, then |:write|. Partial boundary deletion
-is rejected. Deleting the final thread leaves an empty, reusable sidecar.
+is rejected. Clearing only the body retains an empty comment. Before writing,
+|:BetwixtVirtual| with [!] cancels the deletion and all other pending
+interleaved edits. Deleting the final thread leaves an empty, reusable sidecar.
 
 Betwixt uses context only to disambiguate repeated exact anchors. A unique
 exact anchor still resolves if its context changed. Betwixt reports a unique

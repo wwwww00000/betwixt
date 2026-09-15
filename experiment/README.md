@@ -18,7 +18,8 @@ nvim experiment/sample.lua \
   +'runtime plugin/betwixt.lua'
 ```
 
-Then run `:BetwixtAttach experiment/review.betwixt.md` in Neovim.
+Then run `:BetwixtAttach experiment/review.betwixt.md` in Neovim. This retained
+fixture uses an explicit sidecar path; new reviews use the `.betwixt/` default.
 
 The comments begin as virtual highlighted sections, so ordinary source editing
 and `:write` remain untouched. Place the cursor within or near a comment's
@@ -55,7 +56,11 @@ working-file buffer, as CodeDiff and Diffview do for working-tree comparisons:
 ```
 
 `BetwixtAttach!` projects comments before their ranges. `:BetwixtRefresh`
-reloads the sidecar, and `:BetwixtDetach` removes the projection.
+reloads the sidecar, and `:BetwixtDetach` removes the projection. For reviews
+stored at the default path, `:BetwixtAttach` needs no argument, and
+`:BetwixtReload` discovers and attaches the sidecar if present. See the
+[recommended bindings](../README.md#recommended-bindings) for starting comments
+and reloading reviews before attachment.
 
 To test side-by-side alignment in CodeDiff with your actual Neovim
 configuration, run:
@@ -111,8 +116,9 @@ Visually select the smallest useful source range and run:
 ```
 
 When no sidecar is attached, the command lazily uses
-`.betwixt/<source-relative-path>.betwixt.md`; the file is not created until `:w`. Once attached,
-the `<leader>rc` mapping provides the same command for a visual range or the
+`.betwixt/<source-relative-path>.betwixt.md` at the Git worktree root, or under
+`cwd` outside Git; the file is not created until `:w`. Once attached, the
+`<leader>rc` mapping provides the same command for a visual range or the
 cursor line. Both paths materialize the comments as syntactic source-language
 comments, place the cursor in a new blank body, and enter insert mode. The
 optional type defaults to `comment`, status defaults to `open`, and authorship
@@ -123,13 +129,19 @@ of `human`:
 require("betwixt").setup({ author = "reviewer" })
 ```
 
+You can add further comments while interleaved without saving or leaving the
+editing mode. Select source lines as the range endpoints; intervening comment
+blocks are excluded from the anchor. To delete a thread, delete its entire
+block, including frame boundaries and any paired delimiters, then `:w`.
+
 Use `:w` to persist the new sidecar comment and any ordinary source edits in
 the same operation. `:BetwixtVirtual` returns to virtual display after the
 write. Before writing, `:BetwixtVirtual!` cancels the new comment and discards
 other unsaved interleaved changes. Canceling the first unwritten comment leaves
 no sidecar behind.
 
-With the cursor in or near a projected comment's source range, run
+After saving and returning to virtual mode, with the cursor in or near a
+projected comment's source range, run
 `:BetwixtReply` to append a linear reply. The command materializes the thread
 and places the cursor in the new reply body. Reply authors and bodies are
 directly editable; the reply separator remains structural. Changing the root
